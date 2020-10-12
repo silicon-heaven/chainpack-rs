@@ -140,7 +140,7 @@ impl RpcValue {
 
 impl fmt::Debug for RpcValue {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "RpcValue meta: {:?} value: {:?}", self.meta, self.value)
+		write!(f, "RpcValue {{meta: {:?} value: {:?}}}", self.meta, self.value)
 	}
 }
 
@@ -159,4 +159,6 @@ fn metamap_insert() {
 	let vv = mm.value("abc", None);
 	println!("inserted and retrieved: {:?}", vv);
 	assert_eq!(vv, Some(&rv));
+
+	println!("metamap: {:?}", mm);
 }
