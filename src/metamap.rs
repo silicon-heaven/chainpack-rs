@@ -42,26 +42,22 @@ struct MetaKeyVal {
 }
 
 #[derive(PartialEq, Clone)]
-pub struct MetaMap {
-    items: Vec<MetaKeyVal>
-}
+pub struct MetaMap(Vec<MetaKeyVal>);
 
 impl MetaMap {
 
     pub fn new() -> MetaMap {
-        MetaMap {
-            items: Vec::new()
-        }
+        MetaMap(Vec::new())
     }
 
     pub fn insert<I>(&mut self, key: I, value: &RpcValue)
         where I: IntoMetaKeyRef {
-        self.items.push(MetaKeyVal{key: key.to_metakeyref().to_metakey(), value: value.clone()});
+        self.0.push(MetaKeyVal{key: key.to_metakeyref().to_metakey(), value: value.clone()});
     }
 
     pub fn find<I>(&self, key: I) -> Option<&MetaKeyVal>
         where I: IntoMetaKeyRef {
-        for kv in self.items.iter() {
+        for kv in self.0.iter() {
             let mk = key.to_metakeyref();
             match &kv.key {
                 MetaKey::String(k1) => {
@@ -93,7 +89,7 @@ impl MetaMap {
 
 impl fmt::Debug for MetaMap {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.items)
+        write!(f, "{:?}", self.0)
     }
 }
 
