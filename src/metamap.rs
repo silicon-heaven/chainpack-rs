@@ -8,30 +8,30 @@ enum MetaKey {
     String(String),
 }
 
-enum MetaKeyRd<'a> {
+pub enum MetaKeyRef<'a> {
     Int(i32),
     Str(&'a str),
 }
-impl<'a> MetaKeyRd<'a> {
+impl<'a> MetaKeyRef<'a> {
     fn to_metakey(&'a self) -> MetaKey {
         match self {
-            MetaKeyRd::Int(val) => MetaKey::Int(*val),
-            MetaKeyRd::Str(val) => MetaKey::String(val.to_string()),
+            MetaKeyRef::Int(val) => MetaKey::Int(*val),
+            MetaKeyRef::Str(val) => MetaKey::String(val.to_string()),
         }
     }
 }
 
-trait IntoMetaKeyRef {
-    fn to_metakeyref(&self) -> MetaKeyRd;
+pub trait IntoMetaKeyRef {
+    fn to_metakeyref(&self) -> MetaKeyRef;
 }
 impl IntoMetaKeyRef for &str {
-    fn to_metakeyref(&self) -> MetaKeyRd {
-        MetaKeyRd::Str(self)
+    fn to_metakeyref(&self) -> MetaKeyRef {
+        MetaKeyRef::Str(self)
     }
 }
 impl IntoMetaKeyRef for i32 {
-    fn to_metakeyref(&self) -> MetaKeyRd {
-        MetaKeyRd::Int(*self)
+    fn to_metakeyref(&self) -> MetaKeyRef {
+        MetaKeyRef::Int(*self)
     }
 }
 
@@ -55,20 +55,20 @@ impl MetaMap {
         self.0.push(MetaKeyVal{key: key.to_metakeyref().to_metakey(), value: value.clone()});
     }
 
-    pub fn find<I>(&self, key: I) -> Option<&MetaKeyVal>
+    fn find<I>(&self, key: I) -> Option<&MetaKeyVal>
         where I: IntoMetaKeyRef {
         for kv in self.0.iter() {
             let mk = key.to_metakeyref();
             match &kv.key {
                 MetaKey::String(k1) => {
                     match &mk {
-                        MetaKeyRd::Str(k2) => if k1 == k2 {return Some(kv)}
+                        MetaKeyRef::Str(k2) => if k1 == k2 {return Some(kv)}
                         _ 		=> (),
                     }
                 },
                 MetaKey::Int(k1) => {
                     match &mk {
-                        MetaKeyRd::Int(k2) => if k1 == k2 {return Some(kv)}
+                        MetaKeyRef::Int(k2) => if k1 == k2 {return Some(kv)}
                         _ 		=> (),
                     }
                 },
@@ -125,7 +125,7 @@ mod test {
     #[test]
     fn metamap_insert() {
         let mut mm = MetaMap::new();
-        let rv = RpcValue::new();
+        let rv = RpcValue::new(());
 
         mm.insert(123, &rv);
         assert_eq!(mm[123], rv);
@@ -145,7 +145,7 @@ mod test {
     #[test]
     #[should_panic]
     fn metamap_invalid_string_key() {
-        let mut mm = MetaMap::new();
+        let mm = MetaMap::new();
         let _a = &mm["abcd"];
     }
 
@@ -153,7 +153,7 @@ mod test {
     #[should_panic]
     fn metamap_invalid_int_key() {
         let mut mm = MetaMap::new();
-        let rv = RpcValue::new();
+        let rv = RpcValue::new(());
         mm.insert(123, &rv);
         let _a = &mm[1234];
     }
