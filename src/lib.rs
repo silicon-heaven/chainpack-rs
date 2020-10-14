@@ -1,3 +1,4 @@
+mod metamap;
 mod rpcvalue;
 /*
 #[cfg(test)]
