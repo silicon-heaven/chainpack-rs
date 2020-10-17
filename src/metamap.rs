@@ -3,7 +3,7 @@ use std::fmt;
 use std::ops::Index;
 
 #[derive(Debug, Clone, PartialEq)]
-enum MetaKey {
+pub enum MetaKey {
     Int(i32),
     String(String),
 }
@@ -36,18 +36,26 @@ impl IntoMetaKeyRef for i32 {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-struct MetaKeyVal {
-    key: MetaKey,
-    value: RpcValue
+pub(crate) struct MetaKeyVal {
+    pub(crate) key: MetaKey,
+    pub(crate) value: RpcValue
 }
 
 #[derive(PartialEq, Clone)]
-pub struct MetaMap(Vec<MetaKeyVal>);
+pub struct MetaMap(pub(crate) Vec<MetaKeyVal>);
 
 impl MetaMap {
 
     pub fn new() -> MetaMap {
         MetaMap(Vec::new())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.count() == 0
+    }
+
+    pub fn count(&self) -> usize {
+        self.0.len()
     }
 
     pub fn insert<I>(&mut self, key: I, value: RpcValue) -> &mut Self

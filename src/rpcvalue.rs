@@ -21,6 +21,7 @@ lazy_static! {
         let m = HashMap::new();
         m
     };
+    static ref METAMAP_REF: MetaMap = MetaMap::new();
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -91,7 +92,7 @@ from_value_box!(HashMap<i32, RpcValue>, IMap);
 
 #[derive(PartialEq, Clone)]
 pub struct RpcValue {
-	meta: Box<MetaMap>,
+	meta: Option<Box<MetaMap>>,
 	value: Value
 }
 
@@ -99,9 +100,20 @@ impl RpcValue {
 	pub fn new<I>(val: I) -> RpcValue
 	where I: FromValue {
 		RpcValue {
-			meta: Box::new(MetaMap::new()),
+			meta: None,
 			value: val.from_value(),
 		}
+	}
+
+	pub fn meta(&self) -> &MetaMap {
+		match &self.meta {
+			Some(mm) => mm,
+			_ => &METAMAP_REF,
+		}
+	}
+
+	pub(crate) fn value(&self) -> &Value {
+		&self.value
 	}
 
 	pub fn to_bool(&self) -> bool {
@@ -217,7 +229,7 @@ mod test {
 		let dt = chrono::offset::Local::now();
 		let rv = RpcValue::new(dt.clone());
 		assert_eq!(rv.to_datetime().to_epoch_msec() + rv.to_datetime().utc_offset() as i64 * 1000
-				   , dt.timestamp_millis() + dt.offset().fix().local_minus_utc() as i64);
+				   , dt.timestamp_millis() + dt.offset().fix().local_minus_utc() as i64 * 1000);
 
 		let vec1 = vec![RpcValue::new(123), RpcValue::new("foo")];
 		let rv = RpcValue::new(vec1.clone());

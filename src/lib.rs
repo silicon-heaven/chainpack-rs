@@ -1,8 +1,9 @@
 mod datetime;
 mod metamap;
 mod rpcvalue;
+mod cpon;
 
-// pub use generator::*;
+pub use cpon::writer::Writer;
 pub use rpcvalue::{RpcValue};
 pub use datetime::{DateTime};
 pub use metamap::{MetaMap};
