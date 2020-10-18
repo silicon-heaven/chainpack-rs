@@ -32,20 +32,37 @@ pub enum Value {
 	Double(f64),
 	Bool(bool),
 	DateTime(DateTime),
-	Bytes(Box<Vec<u8>>),
-	String(Box<String>),
+	//String(Box<String>),
 	List(Box<Vec<RpcValue>>),
+	Bytes(Box<Vec<u8>>),
 	Map(Box<HashMap<String, RpcValue>>),
 	IMap(Box<HashMap<i32, RpcValue>>),
 }
 
+impl Value {
+	pub fn type_name(&self) -> &'static str {
+		match &self {
+			Value::Null => "Null",
+			Value::Int(n) => "Int",
+			Value::UInt(n) => "UInt",
+			Value::Double(n) => "Double",
+			Value::Bool(b) => "Bool",
+			Value::DateTime(dt) => "DateTime",
+			Value::Bytes(b) => "Bytes",
+			Value::List(l) => "List",
+			Value::Map(m) => "Map",
+			Value::IMap(m) => "IMap",
+		}
+	}
+}
 
 pub trait FromValue {
 	fn from_value(self) -> Value;
 }
 
 impl FromValue for () { fn from_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn from_value(self) -> Value { Value::String(Box::new(String::from(self))) } }
+impl FromValue for &str { fn from_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for &String { fn from_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
 impl FromValue for i32 { fn from_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for usize { fn from_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
@@ -85,7 +102,7 @@ macro_rules! from_value_box {
     };
 }
 
-from_value_box!(String, String);
+from_value_box!(Vec<u8>, Bytes);
 from_value_box!(Vec<RpcValue>, List);
 from_value_box!(HashMap<String, RpcValue>, Map);
 from_value_box!(HashMap<i32, RpcValue>, IMap);
@@ -111,9 +128,16 @@ impl RpcValue {
 			_ => &METAMAP_REF,
 		}
 	}
+	pub fn set_meta(&mut self, m: MetaMap) {
+		self.meta = Some(Box::new(m));
+	}
 
 	pub(crate) fn value(&self) -> &Value {
 		&self.value
+	}
+
+	pub fn type_name(&self) -> &'static str {
+		&self.value.type_name()
 	}
 
 	pub fn to_bool(&self) -> bool {
@@ -142,7 +166,10 @@ impl RpcValue {
 	}
 	pub fn to_str(&self) -> &str {
 		match &self.value {
-			Value::String(s) => &s,
+			Value::Bytes(b) => {
+				let a: &[u8] = b;
+				std::str::from_utf8(a).unwrap()
+			},
 			_ => STR_REF,
 		}
 	}
@@ -211,7 +238,7 @@ mod test {
 		assert_eq!(rv.to_bool(), true);
 		let rv = RpcValue::new("foo");
 		assert_eq!(rv.to_str(), "foo");
-		let rv = RpcValue::new("bar".to_string());
+		let rv = RpcValue::new(&"bar".to_string());
 		assert_eq!(rv.to_str(), "bar");
 		let rv = RpcValue::new(123);
 		assert_eq!(rv.to_i32(), 123);
