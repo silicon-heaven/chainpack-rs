@@ -1,5 +1,6 @@
 use crate::metamap::MetaMap;
 use crate::datetime::DateTime;
+use crate::decimal::Decimal;
 use std::fmt;
 use std::collections::HashMap;
 use lazy_static::lazy_static;
@@ -8,7 +9,6 @@ use lazy_static::lazy_static;
 
 const STR_REF: &str = "";
 lazy_static! {
-	static ref DATETIME_REF: DateTime = DateTime::invalid();
     static ref LIST_REF: Vec<RpcValue> = {
         let v = Vec::new();
         v
@@ -32,6 +32,7 @@ pub enum Value {
 	Double(f64),
 	Bool(bool),
 	DateTime(DateTime),
+	Decimal(Decimal),
 	//String(Box<String>),
 	List(Box<Vec<RpcValue>>),
 	Bytes(Box<Vec<u8>>),
@@ -48,6 +49,7 @@ impl Value {
 			Value::Double(n) => "Double",
 			Value::Bool(b) => "Bool",
 			Value::DateTime(dt) => "DateTime",
+			Value::Decimal(d) => "Decimal",
 			Value::Bytes(b) => "Bytes",
 			Value::List(l) => "List",
 			Value::Map(m) => "Map",
@@ -91,6 +93,7 @@ from_value!(i64, Int);
 from_value!(u64, UInt);
 from_value!(f64, Double);
 from_value!(DateTime, DateTime);
+from_value!(Decimal, Decimal);
 
 macro_rules! from_value_box {
     ($from:ty, $to:ident) => {
@@ -158,10 +161,16 @@ impl RpcValue {
 			_ => 0.,
 		}
 	}
-	pub fn to_datetime(&self) -> &DateTime {
+	pub fn to_datetime(&self) -> DateTime {
 		match &self.value {
-			Value::DateTime(d) => d,
-			_ => &DATETIME_REF,
+			Value::DateTime(d) => d.clone(),
+			_ => DateTime::invalid(),
+		}
+	}
+	pub fn to_decimal(&self) -> Decimal {
+		match &self.value {
+			Value::Decimal(d) => d.clone(),
+			_ => Decimal::new(0, 0),
 		}
 	}
 	pub fn to_str(&self) -> &str {
@@ -201,12 +210,13 @@ impl fmt::Debug for RpcValue {
 
 #[cfg(test)]
 mod test {
-	use crate::metamap::MetaMap;
 	use crate::rpcvalue::{RpcValue, Value};
+	use crate::metamap::MetaMap;
+	use crate::DateTime;
+	use crate::Decimal;
 	use std::collections::HashMap;
-	use std::mem::size_of;
-	use crate::datetime::DateTime;
 	use chrono::Offset;
+	use std::mem::size_of;
 
 	macro_rules! show_size {
 		(header) => (
@@ -247,7 +257,11 @@ mod test {
 
 		let dt = DateTime::now();
 		let rv = RpcValue::new(dt.clone());
-		assert_eq!(rv.to_datetime(), &dt);
+		assert_eq!(rv.to_datetime(), dt);
+
+		let dc = Decimal::new(123, -1);
+		let rv = RpcValue::new(dc.clone());
+		assert_eq!(rv.to_decimal(), dc);
 
 		let dt = chrono::offset::Utc::now();
 		let rv = RpcValue::new(dt.clone());

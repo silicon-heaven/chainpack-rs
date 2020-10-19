@@ -184,7 +184,7 @@ mod test
     use crate::{MetaMap, RpcValue};
 
     #[test]
-    fn size() {
+    fn write() {
         let mut mm = MetaMap::new();
 
         mm.insert(123, RpcValue::new(1.1));
