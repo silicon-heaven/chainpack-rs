@@ -12,15 +12,18 @@ pub struct Writer<'a, 'b, W>
     pub indent: &'b str,
 }
 
-pub fn to_cpon(rv: &RpcValue) -> Vec<u8>
+pub fn to_cpon(rv: &RpcValue) -> String
 {
-    let mut buff: Vec<u8> = Vec::new();
+    let mut buff = Vec::new();
     let mut wr = Writer::new(&mut buff);
     let res= wr.write(rv);
     if let Ok(_) = res {
-        return buff
+        unsafe {
+            // writer should not generate UTF8 invalid text
+            return String::from_utf8_unchecked(buff)
+        }
     }
-    Vec::new()
+    String::new()
 }
 
 impl<'a, 'b, W> Writer<'a, 'b, W>
@@ -201,7 +204,7 @@ mod test
 
         let mut rv = RpcValue::new("test");
         rv.set_meta(mm);
-        println!("cpon: {}", std::str::from_utf8(&to_cpon(&rv)).unwrap());
+        println!("cpon: {}", to_cpon(&rv));
     }
 
 }

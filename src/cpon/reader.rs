@@ -2,6 +2,10 @@ use crate::{RpcValue, MetaMap, metamap::MetaKey};
 use std::io;
 use io::Read;
 use crate::decimal::Decimal;
+use std::os::raw::c_char;
+use std::hash::Hash;
+use std::collections::HashMap;
+use crate::rpcvalue::FromValue;
 
 #[derive(Debug)]
 pub struct ReaderError {
@@ -17,6 +21,9 @@ impl ReaderError {
 
 pub type ReaderResult = Result<RpcValue, ReaderError>;
 
+type Value = crate::rpcvalue::Value;
+type ReadValueResult = Result<Value, ReaderError>;
+
 pub struct Reader<'a, R>
 {
     reader: &'a mut R,
@@ -25,16 +32,10 @@ pub struct Reader<'a, R>
     col: usize,
 }
 
-pub fn from_cpon(cpon: &[u8]) -> ReaderResult
-{
-    Ok(RpcValue::new(()))
-}
-
 impl<'a, R> Reader<'a, R>
     where R: Read
 {
     pub fn new(reader: &'a mut R) -> Reader<'a, R> {
-        const EMPTY: &'static str = "";
         Reader {
             reader,
             peeked: None,
@@ -49,19 +50,162 @@ impl<'a, R> Reader<'a, R>
 
     pub fn read(&mut self) -> ReaderResult
     {
-        Ok(RpcValue::new(()))
+        self.skip_white_insignificant()?;
+        let mut b = self.peek_byte();
+        let mut mm: Option<MetaMap> = None;
+        if b == b'<' {
+            mm = Some(self.read_meta()?);
+            self.skip_white_insignificant()?;
+            b = self.peek_byte();
+        }
+        let v = match &b {
+            b'0' ..= b'9' | b'+' | b'-' => self.read_number(),
+            b'"' => self.read_cstring(),
+            b'[' => self.read_list(),
+            b'{' => self.read_map(),
+            b'i' => self.read_imap(),
+            b'd' => self.read_datetime(),
+            b't' => self.read_true(),
+            b'f' => self.read_false(),
+            b'f' => self.read_null(),
+            _ => Err(self.new_error(&format!("Invalid char {}", b))),
+        }?;
+        let mut rv = RpcValue::new(v);
+        if let Some(m) = mm {
+            rv.set_meta(m);
+        }
+        return Ok(rv)
     }
-/*
-    pub fn read_meta(&mut self) -> Result<MetaMap, ReaderError>
+    fn read_meta(&mut self) -> Result<MetaMap, ReaderError> {
+        self.get_byte()?; // eat '<'
+        let mut map = MetaMap::new();
+        loop {
+            self.skip_white_insignificant()?;
+            let b = self.peek_byte();
+            if b == b'>' {
+                self.get_byte()?;
+                break;
+            }
+            let key = self.read()?;
+            self.skip_white_insignificant()?;
+            let val = self.read()?;
+            if key.is_int() {
+                map.insert(key.to_i32(), val);
+            }
+            else {
+                map.insert(key.to_str(), val);
+            }
+        }
+        Ok(map)
+    }
+
+    fn read_cstring(&mut self) -> ReadValueResult {
+        let mut buff: Vec<u8> = Vec::new();
+        self.get_byte()?; // eat "
+        loop {
+            let b = self.get_byte()?;
+            match &b {
+                b'\\' => {
+                    let b = self.get_byte()?;
+                    match &b {
+                        b'\\' => buff.push(b'\\'),
+                        b'"' => buff.push(b'"'),
+                        b'n' => buff.push(b'\n'),
+                        b'r' => buff.push(b'\r'),
+                        b't' => buff.push(b'\t'),
+                        b'0' => buff.push(b'\0'),
+                        _ => buff.push(b),
+                    }
+                }
+                b'"' => {
+                    // end of string
+                    break;
+                }
+                _ => {
+                    buff.push(b);
+                }
+            }
+        }
+        return Ok(buff.make_value())
+    }
+    fn read_list(&mut self) -> ReadValueResult
     {
-
+        let mut lst = Vec::new();
+        self.get_byte()?; // eat '['
+        loop {
+            self.skip_white_insignificant()?;
+            let b = self.peek_byte();
+            if b == b']' {
+                self.get_byte()?;
+                break;
+            }
+            let val = self.read()?;
+            lst.push(val);
+        }
+        return Ok(lst.make_value())
     }
-    fn read_value(&mut self) -> ReaderResult
-    {
-
+    fn read_map(&mut self) -> ReadValueResult {
+        let mut map: HashMap<String, RpcValue> = HashMap::new();
+        self.get_byte()?; // eat '{'
+        loop {
+            self.skip_white_insignificant()?;
+            let b = self.peek_byte();
+            if b == b'}' {
+                self.get_byte()?;
+                break;
+            }
+            let key = self.read_cstring()?;
+            let mut skey: &str = "";
+            match &key {
+                Value::Bytes(b) => {
+                    let rs = std::str::from_utf8(&b);
+                    match rs  {
+                       Ok(s) => skey = s,
+                       Err(e) => return Err(self.new_error(&format!("Invalid Map key, Utf8 error: {}", e))),
+                    }
+                },
+                _ => return Err(self.new_error(&format!("Invalid Map key '{}'", b))),
+            }
+            self.skip_white_insignificant()?;
+            let val = self.read()?;
+            map.insert(skey.to_string(), val);
+        }
+        return Ok(map.make_value())
+    }
+    fn read_imap(&mut self) -> ReadValueResult {
+        self.get_byte()?; // eat 'i'
+        let b = self.get_byte()?; // eat '{'
+        if b != b'{' {
+            return Err(self.new_error("Wrong IMap prefix, '{' expected."))
+        }
+        let mut map: HashMap<i32, RpcValue> = HashMap::new();
+        loop {
+            self.skip_white_insignificant()?;
+            let b = self.peek_byte();
+            if b == b'}' {
+                self.get_byte()?;
+                break;
+            }
+            let key = self.read_int()?.0;
+            self.skip_white_insignificant()?;
+            let val = self.read()?;
+            map.insert(key as i32, val);
+        }
+        return Ok(map.make_value())
+    }
+    fn read_datetime(&mut self) -> ReadValueResult {
+        unimplemented!()
+    }
+    fn read_true(&mut self) -> ReadValueResult {
+        unimplemented!()
+    }
+    fn read_false(&mut self) -> ReadValueResult {
+        unimplemented!()
+    }
+    fn read_null(&mut self) -> ReadValueResult {
+        unimplemented!()
     }
 
- */
     fn get_byte(&mut self) -> Result<u8, ReaderError>
     {
         if let Some(b) = self.peeked {
@@ -89,6 +233,9 @@ impl<'a, R> Reader<'a, R>
     }
     fn peek_byte(&mut self) -> u8
     {
+        if let Some(b) = self.peeked {
+            return b
+        }
         let mut arr: [u8; 1] = [0];
         let r = self.reader.read(&mut arr);
         match r {
@@ -102,7 +249,7 @@ impl<'a, R> Reader<'a, R>
             _ => 0
         }
     }
-    fn read_number(&mut self) -> ReaderResult
+    fn read_number(&mut self) -> ReadValueResult
     {
         let mut mantisa: i64 = 0;
         let mut exponent = 0;
@@ -127,29 +274,44 @@ impl<'a, R> Reader<'a, R>
             return Err(self.new_error("Number should contain at least one digit."))
         }
         mantisa = n;
-        let b = self.peek_byte();
-        match b {
-            b'u' => {
-                is_uint = true;
-                self.get_byte()?;
-            }
-            b'.' => {
-                is_decimal = true;
-                self.get_byte()?;
-                let (n, digit_cnt) = self.read_int()?;
-                decimals = n;
-                dec_cnt = digit_cnt as i64;
-            }
-            b'e' | b'E' => {
-                is_decimal = true;
-                self.get_byte()?;
-                let (n, digit_cnt) = self.read_int()?;
-                exponent = n;
-                if digit_cnt == 0 {
-                    return Err(self.new_error("Malformed number exponetional part."))
+        #[derive(PartialEq)]
+        enum State { Mantisa, Decimals, Exponent };
+        let mut state = State::Mantisa;
+        loop {
+            let b = self.peek_byte();
+            match b {
+                b'u' => {
+                    is_uint = true;
+                    self.get_byte()?;
+                    break;
                 }
+                b'.' => {
+                    if state != State::Mantisa {
+                        return Err(self.new_error("Unexpected decimal point."))
+                    }
+                    state = State::Decimals;
+                    is_decimal = true;
+                    self.get_byte()?;
+                    let (n, digit_cnt) = self.read_int()?;
+                    decimals = n;
+                    dec_cnt = digit_cnt as i64;
+                }
+                b'e' | b'E' => {
+                    if state != State::Mantisa && state != State::Decimals {
+                        return Err(self.new_error("Unexpected exponet mark."))
+                    }
+                    //state = State::Exponent;
+                    is_decimal = true;
+                    self.get_byte()?;
+                    let (n, digit_cnt) = self.read_int()?;
+                    exponent = n;
+                    if digit_cnt == 0 {
+                        return Err(self.new_error("Malformed number exponetional part."))
+                    }
+                    break;
+                }
+                _ => { break; }
             }
-            _ => (),
         }
         if is_decimal {
             for _i in 0 .. dec_cnt {
@@ -159,13 +321,13 @@ impl<'a, R> Reader<'a, R>
             if is_neg {
                 mantisa = -mantisa
             }
-            return Ok(RpcValue::new(Decimal::new(mantisa, (exponent - dec_cnt) as i8)))
+            return Ok(Decimal::new(mantisa, (exponent - dec_cnt) as i8).make_value())
         }
         if is_uint {
-            return Ok(RpcValue::new(mantisa as u64))
+            return Ok((mantisa as u64).make_value())
         }
         if is_neg { mantisa = -mantisa }
-        return Ok(RpcValue::new(mantisa))
+        return Ok(mantisa.make_value())
     }
 
     fn read_int(&mut self) -> Result<(i64, i32), ReaderError>
@@ -271,10 +433,10 @@ impl<'a, R> Reader<'a, R>
                         }
                     }
                     b':' => {
-                        self.get_byte()?;
+                        self.get_byte()?; // skip key delimiter
                     }
                     b',' => {
-                        self.get_byte()?;
+                        self.get_byte()?; // skip val delimiter
                     }
                     _ => {
                         break;
@@ -318,50 +480,82 @@ impl<'a, R> Reader<'a, R>
         self.get_byte()?; // eat '"'
         Ok(RpcValue::new(bytes))
     }
-    fn read_list(&mut self) -> ReaderResult
-    {
-        let mut lst = Vec::new();
-        self.get_byte()?; // eat '['
-        loop {
-            self.skip_white_insignificant()?;
-            let b = self.peek_byte();
-            if b == b']' {
-                self.get_byte()?;
-                break;
-            }
-            let val = self.read()?;
-            lst.push(val);
-        }
-        Ok(RpcValue::new(lst))
+}
+
+pub trait FromCpon {
+    fn from_cpon(&self) -> ReaderResult;
+}
+
+impl FromCpon for &str {
+    fn from_cpon(&self) -> ReaderResult {
+        let mut b = self.as_bytes();
+        let mut rd = Reader::new(&mut b);
+        return rd.read()
     }
 }
-//
-// #[cfg(test)]
-// mod test
-// {
-//     use crate::cpon::reader::{Writer, to_cpon};
-//     use crate::{MetaMap, RpcValue};
-//
-//     #[test]
-//     fn read() {
-//         let mut mm = MetaMap::new();
-//
-//         mm.insert(123, RpcValue::new(1.1));
-//         mm.insert(42, RpcValue::new(1));
-//         mm.insert("foo", RpcValue::new("bar")).insert(123, RpcValue::new("baz"));
-//         let v1 = vec![RpcValue::new("foo"), RpcValue::new("bar"), RpcValue::new("baz")];
-//         mm.insert("list", RpcValue::new(v1));
-//
-//         let mut buff = Vec::new();
-//         let mut wr = Reader::new(&mut buff);
-//         wr.indent = "  ";
-//         let sz = wr.read_meta(&mm);
-//         println!("size: {} cpon: {}", sz.unwrap(), std::str::from_utf8(&buff).unwrap());
-//
-//         let mut rv = RpcValue::new("test");
-//         rv.set_meta(mm);
-//         println!("cpon: {}", std::str::from_utf8(&to_cpon(&rv)).unwrap());
-//     }
-//
-// }
+
+
+#[cfg(test)]
+mod test
+{
+    use crate::cpon::reader::{Reader, FromCpon};
+    use crate::{MetaMap, RpcValue};
+    use crate::Decimal;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_read() {
+        assert_eq!("0".from_cpon().unwrap().to_i32(), 0);
+        assert_eq!("123".from_cpon().unwrap().to_i32(), 123);
+        assert_eq!("-123".from_cpon().unwrap().to_i32(), -123);
+        assert_eq!("+123".from_cpon().unwrap().to_i32(), 123);
+        assert_eq!("123u".from_cpon().unwrap().to_u32(), 123u32);
+        assert_eq!("0xFF".from_cpon().unwrap().to_i32(), 255);
+        assert_eq!("-0x1000".from_cpon().unwrap().to_i32(), -4096);
+        assert_eq!("123.4".from_cpon().unwrap().to_decimal(), Decimal::new(1234, -1));
+        assert_eq!("0.123".from_cpon().unwrap().to_decimal(), Decimal::new(123, -3));
+        assert_eq!("-0.123".from_cpon().unwrap().to_decimal(), Decimal::new(-123, -3));
+        assert_eq!("0e0".from_cpon().unwrap().to_decimal(), Decimal::new(0, 0));
+        assert_eq!("0.123e3".from_cpon().unwrap().to_decimal(), Decimal::new(123, 0));
+        assert_eq!("1000000.".from_cpon().unwrap().to_decimal(), Decimal::new(1000000, 0));
+
+        assert_eq!(r#""foo""#.from_cpon().unwrap().to_str(), "foo");
+        assert_eq!(r#""ěščřžýáí""#.from_cpon().unwrap().to_str(), "ěščřžýáí");
+        assert_eq!("\"foo\tbar\nbaz\"".from_cpon().unwrap().to_str(), "foo\tbar\nbaz");
+        assert_eq!(r#""foo\"bar""#.from_cpon().unwrap().to_str(), r#"foo"bar"#);
+
+        let lst1 = vec![RpcValue::new(123), RpcValue::new("foo")];
+        let cpon = r#"[123 , "foo"]"#;
+        let rv = cpon.from_cpon().unwrap();
+        let lst2 = rv.to_list();
+        assert_eq!(lst2, &lst1);
+
+        let mut map: HashMap<String, RpcValue> = HashMap::new();
+        map.insert("foo".to_string(), RpcValue::new(123));
+        map.insert("bar".to_string(), RpcValue::new("baz"));
+        let cpon = r#"{"foo": 123,"bar":"baz"}"#;
+        assert_eq!(cpon.from_cpon().unwrap().to_map(), &map);
+
+        let mut map: HashMap<i32, RpcValue> = HashMap::new();
+        map.insert(1, RpcValue::new(123));
+        map.insert(2, RpcValue::new("baz"));
+        let cpon = r#"i{1: 123,2:"baz"}"#;
+        assert_eq!(cpon.from_cpon().unwrap().to_imap(), &map);
+
+        let cpon = r#"<1: 123,2:"baz">"#;
+        let mut b = cpon.as_bytes();
+        let mut rd = Reader::new(&mut b);
+        let mm1 = rd.read_meta().unwrap();
+        let mut mm2 = MetaMap::new();
+        mm2.insert(1, RpcValue::new(123));
+        mm2.insert(2, RpcValue::new("baz"));
+        assert_eq!(mm1, mm2);
+
+        let cpon1 = r#"<1:123,2:"foo","bar":"baz">42"#;
+        let rv = cpon1.from_cpon().unwrap();
+        let cpon2 = rv.to_cpon();
+        assert_eq!(cpon1, cpon2);
+    }
+
+}
 

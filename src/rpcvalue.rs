@@ -1,27 +1,31 @@
-use crate::metamap::MetaMap;
+use std::collections::HashMap;
+use std::fmt;
+use std::string::FromUtf8Error;
+
+use lazy_static::lazy_static;
+
 use crate::datetime::DateTime;
 use crate::decimal::Decimal;
-use std::fmt;
-use std::collections::HashMap;
-use lazy_static::lazy_static;
+use crate::metamap::MetaMap;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
-const STR_REF: &str = "";
+const EMPTY_STR_REF: &str = "";
+const EMPTY_BYTES_REF: &[u8] = EMPTY_STR_REF.as_bytes();
 lazy_static! {
-    static ref LIST_REF: Vec<RpcValue> = {
+    static ref EMPTY_LIST_REF: Vec<RpcValue> = {
         let v = Vec::new();
         v
     };
-    static ref MAP_REF: HashMap<String, RpcValue> = {
+    static ref EMPTY_MAP_REF: HashMap<String, RpcValue> = {
         let m = HashMap::new();
         m
     };
-    static ref IMAP_REF: HashMap<i32, RpcValue> = {
+    static ref EMPTY_IMAP_REF: HashMap<i32, RpcValue> = {
         let m = HashMap::new();
         m
     };
-    static ref METAMAP_REF: MetaMap = MetaMap::new();
+    static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -44,36 +48,37 @@ impl Value {
 	pub fn type_name(&self) -> &'static str {
 		match &self {
 			Value::Null => "Null",
-			Value::Int(n) => "Int",
-			Value::UInt(n) => "UInt",
-			Value::Double(n) => "Double",
-			Value::Bool(b) => "Bool",
-			Value::DateTime(dt) => "DateTime",
-			Value::Decimal(d) => "Decimal",
-			Value::Bytes(b) => "Bytes",
-			Value::List(l) => "List",
-			Value::Map(m) => "Map",
-			Value::IMap(m) => "IMap",
+			Value::Int(_) => "Int",
+			Value::UInt(_) => "UInt",
+			Value::Double(_) => "Double",
+			Value::Bool(_) => "Bool",
+			Value::DateTime(_) => "DateTime",
+			Value::Decimal(_) => "Decimal",
+			Value::Bytes(_) => "Bytes",
+			Value::List(_) => "List",
+			Value::Map(_) => "Map",
+			Value::IMap(_) => "IMap",
 		}
 	}
 }
 
 pub trait FromValue {
-	fn from_value(self) -> Value;
+	fn make_value(self) -> Value;
 }
 
-impl FromValue for () { fn from_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn from_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
-impl FromValue for &String { fn from_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
-impl FromValue for i32 { fn from_value(self) -> Value { Value::Int(self as i64) } }
-impl FromValue for usize { fn from_value(self) -> Value { Value::UInt(self as u64) } }
+impl FromValue for Value { fn make_value(self) -> Value { self } }
+impl FromValue for () { fn make_value(self) -> Value { Value::Null } }
+impl FromValue for &str { fn make_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for &String { fn make_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for i32 { fn make_value(self) -> Value { Value::Int(self as i64) } }
+impl FromValue for usize { fn make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
-	fn from_value(self) -> Value {
+	fn make_value(self) -> Value {
 		Value::DateTime(DateTime::from_epoch_msec(self.timestamp_millis(), 0))
 	}
 }
 impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
-	fn from_value(self) -> Value {
+	fn make_value(self) -> Value {
 		Value::DateTime(DateTime::from_datetime(&self))
 	}
 }
@@ -81,7 +86,7 @@ impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
 macro_rules! from_value {
     ($from:ty, $to:ident) => {
 		impl FromValue for $from {
-			fn from_value(self) -> Value {
+			fn make_value(self) -> Value {
 				Value::$to(self)
 			}
 		}
@@ -98,7 +103,7 @@ from_value!(Decimal, Decimal);
 macro_rules! from_value_box {
     ($from:ty, $to:ident) => {
 		impl FromValue for $from {
-			fn from_value(self) -> Value {
+			fn make_value(self) -> Value {
 				Value::$to(Box::new(self))
 			}
 		}
@@ -121,18 +126,26 @@ impl RpcValue {
 	where I: FromValue {
 		RpcValue {
 			meta: None,
-			value: val.from_value(),
+			value: val.make_value(),
 		}
 	}
 
 	pub fn meta(&self) -> &MetaMap {
 		match &self.meta {
 			Some(mm) => mm,
-			_ => &METAMAP_REF,
+			_ => &EMPTY_METAMAP_REF,
 		}
 	}
+	pub fn clear_meta(&mut self) {
+		self.meta = None;
+	}
 	pub fn set_meta(&mut self, m: MetaMap) {
-		self.meta = Some(Box::new(m));
+		if m.is_empty() {
+			self.meta = None;
+		}
+		else {
+			self.meta = Some(Box::new(m));
+		}
 	}
 
 	pub(crate) fn value(&self) -> &Value {
@@ -143,18 +156,33 @@ impl RpcValue {
 		&self.value.type_name()
 	}
 
+	pub fn is_int(&self) -> bool {
+		match &self.value {
+			Value::Int(_) => true,
+			_ => false,
+		}
+	}
+
 	pub fn to_bool(&self) -> bool {
 		match &self.value {
 			Value::Bool(d) => *d,
 			_ => false,
 		}
 	}
-	pub fn to_i32(&self) -> i32 {
+	pub fn to_i64(&self) -> i64 {
 		match &self.value {
-			Value::Int(d) => *d as i32,
+			Value::Int(d) => *d,
 			_ => 0,
 		}
 	}
+	pub fn to_i32(&self) -> i32 { self.to_i64() as i32 }
+	pub fn to_u64(&self) -> u64 {
+		match &self.value {
+			Value::UInt(d) => *d,
+			_ => 0,
+		}
+	}
+	pub fn to_u32(&self) -> u32 { self.to_u64() as u32 }
 	pub fn to_double(&self) -> f64 {
 		match &self.value {
 			Value::Double(d) => *d,
@@ -179,26 +207,47 @@ impl RpcValue {
 				let a: &[u8] = b;
 				std::str::from_utf8(a).unwrap()
 			},
-			_ => STR_REF,
+			_ => EMPTY_STR_REF,
+		}
+	}
+	pub fn to_bytes(&self) -> &[u8] {
+		match &self.value {
+			Value::Bytes(b) => {
+				let a: &[u8] = b;
+				a
+			},
+			_ => EMPTY_BYTES_REF,
+		}
+	}
+	pub fn to_string(&self) -> Result<String, FromUtf8Error> {
+		match &self.value {
+			Value::Bytes(b) => {
+				let c = b.as_ref();
+				return String::from_utf8(b.as_ref().clone())
+			},
+			_ => Ok(String::new()),
 		}
 	}
 	pub fn to_list(&self) -> &Vec<RpcValue> {
 		match &self.value {
 			Value::List(b) => &b,
-			_ => &LIST_REF,
+			_ => &EMPTY_LIST_REF,
 		}
 	}
 	pub fn to_map(&self) -> &HashMap<String, RpcValue> {
 		match &self.value {
 			Value::Map(b) => &b,
-			_ => &MAP_REF,
+			_ => &EMPTY_MAP_REF,
 		}
 	}
 	pub fn to_imap(&self) -> &HashMap<i32, RpcValue> {
 		match &self.value {
 			Value::IMap(b) => &b,
-			_ => &IMAP_REF,
+			_ => &EMPTY_IMAP_REF,
 		}
+	}
+	pub fn to_cpon(&self) -> String {
+		crate::cpon::writer::to_cpon(self)
 	}
 }
 
@@ -210,13 +259,15 @@ impl fmt::Debug for RpcValue {
 
 #[cfg(test)]
 mod test {
-	use crate::rpcvalue::{RpcValue, Value};
-	use crate::metamap::MetaMap;
+	use std::collections::HashMap;
+	use std::mem::size_of;
+
+	use chrono::Offset;
+
 	use crate::DateTime;
 	use crate::Decimal;
-	use std::collections::HashMap;
-	use chrono::Offset;
-	use std::mem::size_of;
+	use crate::metamap::MetaMap;
+	use crate::rpcvalue::{RpcValue, Value};
 
 	macro_rules! show_size {
 		(header) => (
