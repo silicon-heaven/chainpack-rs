@@ -156,6 +156,12 @@ impl RpcValue {
 		&self.value.type_name()
 	}
 
+	pub fn is_null(&self) -> bool {
+		match &self.value {
+			Value::Null => true,
+			_ => false,
+		}
+	}
 	pub fn is_int(&self) -> bool {
 		match &self.value {
 			Value::Int(_) => true,
@@ -246,8 +252,11 @@ impl RpcValue {
 			_ => &EMPTY_IMAP_REF,
 		}
 	}
-	pub fn to_cpon(&self) -> String {
+	pub fn to_cpon(&self) -> Vec<u8> {
 		crate::cpon::writer::to_cpon(self)
+	}
+	pub fn to_cpon_string(&self) -> Result<String, FromUtf8Error> {
+		crate::cpon::writer::to_cpon_string(self)
 	}
 }
 

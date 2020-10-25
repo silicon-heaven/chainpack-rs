@@ -1,6 +1,7 @@
 use crate::{RpcValue, MetaMap, metamap::MetaKey};
 use std::io;
 use crate::rpcvalue::Value;
+use std::string::FromUtf8Error;
 //use std::slice::Iter;
 //use std::intrinsics::write_bytes;
 
@@ -12,18 +13,19 @@ pub struct Writer<'a, 'b, W>
     pub indent: &'b str,
 }
 
-pub fn to_cpon(rv: &RpcValue) -> String
+pub fn to_cpon(rv: &RpcValue) -> Vec<u8>
 {
     let mut buff = Vec::new();
     let mut wr = Writer::new(&mut buff);
     let res= wr.write(rv);
     if let Ok(_) = res {
-        unsafe {
-            // writer should not generate UTF8 invalid text
-            return String::from_utf8_unchecked(buff)
-        }
+        return buff
     }
-    String::new()
+    return Vec::new()
+}
+pub fn to_cpon_string(rv: &RpcValue) -> Result<String, FromUtf8Error> {
+    let cp = to_cpon(rv);
+    String::from_utf8(cp)
 }
 
 impl<'a, 'b, W> Writer<'a, 'b, W>
@@ -183,7 +185,7 @@ where W: io::Write
 #[cfg(test)]
 mod test
 {
-    use crate::cpon::writer::{Writer, to_cpon};
+    use crate::cpon::writer::{Writer, to_cpon, to_cpon_string};
     use crate::{MetaMap, RpcValue};
 
     #[test]
@@ -204,7 +206,7 @@ mod test
 
         let mut rv = RpcValue::new("test");
         rv.set_meta(mm);
-        println!("cpon: {}", to_cpon(&rv));
+        println!("cpon: {}", to_cpon_string(&rv).unwrap());
     }
 
 }

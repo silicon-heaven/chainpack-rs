@@ -44,7 +44,7 @@ impl<'a, R> Reader<'a, R>
         }
     }
 
-    fn new_error(&self, msg: &str) -> ReaderError {
+    fn make_error(&self, msg: &str) -> ReaderError {
         ReaderError { msg: msg.to_string(), line: self.line, col: self.col }
     }
 
@@ -67,8 +67,8 @@ impl<'a, R> Reader<'a, R>
             b'd' => self.read_datetime(),
             b't' => self.read_true(),
             b'f' => self.read_false(),
-            b'f' => self.read_null(),
-            _ => Err(self.new_error(&format!("Invalid char {}", b))),
+            b'n' => self.read_null(),
+            _ => Err(self.make_error(&format!("Invalid char {}", b))),
         }?;
         let mut rv = RpcValue::new(v);
         if let Some(m) = mm {
@@ -161,10 +161,10 @@ impl<'a, R> Reader<'a, R>
                     let rs = std::str::from_utf8(&b);
                     match rs  {
                        Ok(s) => skey = s,
-                       Err(e) => return Err(self.new_error(&format!("Invalid Map key, Utf8 error: {}", e))),
+                       Err(e) => return Err(self.make_error(&format!("Invalid Map key, Utf8 error: {}", e))),
                     }
                 },
-                _ => return Err(self.new_error(&format!("Invalid Map key '{}'", b))),
+                _ => return Err(self.make_error(&format!("Invalid Map key '{}'", b))),
             }
             self.skip_white_insignificant()?;
             let val = self.read()?;
@@ -176,7 +176,7 @@ impl<'a, R> Reader<'a, R>
         self.get_byte()?; // eat 'i'
         let b = self.get_byte()?; // eat '{'
         if b != b'{' {
-            return Err(self.new_error("Wrong IMap prefix, '{' expected."))
+            return Err(self.make_error("Wrong IMap prefix, '{' expected."))
         }
         let mut map: HashMap<i32, RpcValue> = HashMap::new();
         loop {
@@ -197,13 +197,25 @@ impl<'a, R> Reader<'a, R>
         unimplemented!()
     }
     fn read_true(&mut self) -> ReadValueResult {
-        unimplemented!()
+        self.read_token("true")?;
+        return Ok(true.make_value())
     }
     fn read_false(&mut self) -> ReadValueResult {
-        unimplemented!()
+        self.read_token("false")?;
+        return Ok(false.make_value())
     }
     fn read_null(&mut self) -> ReadValueResult {
-        unimplemented!()
+        self.read_token("null")?;
+        return Ok(().make_value())
+    }
+    fn read_token(&mut self, token: &str) -> Result<(), ReaderError> {
+        for c in token.as_bytes() {
+            let b = self.get_byte()?;
+            if b != *c {
+                return Err(self.make_error(&format!("Incomplete '{}' literal.", token)))
+            }
+        }
+        return Ok(())
     }
 
     fn get_byte(&mut self) -> Result<u8, ReaderError>
@@ -217,7 +229,7 @@ impl<'a, R> Reader<'a, R>
         match r {
             Ok(n) => {
                 if n == 0 {
-                    return Err(self.new_error("Unexpected end of stream."))
+                    return Err(self.make_error("Unexpected end of stream."))
                 }
                 if arr[0] == b'\n' {
                     self.line += 1;
@@ -228,7 +240,7 @@ impl<'a, R> Reader<'a, R>
                 }
                 return Ok(arr[0])
             }
-            Err(e) => return Err(self.new_error(&e.to_string()))
+            Err(e) => return Err(self.make_error(&e.to_string()))
         }
     }
     fn peek_byte(&mut self) -> u8
@@ -271,7 +283,7 @@ impl<'a, R> Reader<'a, R>
 
         let (n, digit_cnt) = self.read_int()?;
         if digit_cnt == 0 {
-            return Err(self.new_error("Number should contain at least one digit."))
+            return Err(self.make_error("Number should contain at least one digit."))
         }
         mantisa = n;
         #[derive(PartialEq)]
@@ -287,7 +299,7 @@ impl<'a, R> Reader<'a, R>
                 }
                 b'.' => {
                     if state != State::Mantisa {
-                        return Err(self.new_error("Unexpected decimal point."))
+                        return Err(self.make_error("Unexpected decimal point."))
                     }
                     state = State::Decimals;
                     is_decimal = true;
@@ -298,7 +310,7 @@ impl<'a, R> Reader<'a, R>
                 }
                 b'e' | b'E' => {
                     if state != State::Mantisa && state != State::Decimals {
-                        return Err(self.new_error("Unexpected exponet mark."))
+                        return Err(self.make_error("Unexpected exponet mark."))
                     }
                     //state = State::Exponent;
                     is_decimal = true;
@@ -306,7 +318,7 @@ impl<'a, R> Reader<'a, R>
                     let (n, digit_cnt) = self.read_int()?;
                     exponent = n;
                     if digit_cnt == 0 {
-                        return Err(self.new_error("Malformed number exponetional part."))
+                        return Err(self.make_error("Malformed number exponetional part."))
                     }
                     break;
                 }
@@ -428,7 +440,7 @@ impl<'a, R> Reader<'a, R>
                                 }
                             }
                             _ => {
-                                return Err(self.new_error("Malformed comment"))
+                                return Err(self.make_error("Malformed comment"))
                             }
                         }
                     }
@@ -505,6 +517,9 @@ mod test
 
     #[test]
     fn test_read() {
+        assert_eq!("null".from_cpon().unwrap().is_null(), true);
+        assert_eq!("false".from_cpon().unwrap().to_bool(), false);
+        assert_eq!("true".from_cpon().unwrap().to_bool(), true);
         assert_eq!("0".from_cpon().unwrap().to_i32(), 0);
         assert_eq!("123".from_cpon().unwrap().to_i32(), 123);
         assert_eq!("-123".from_cpon().unwrap().to_i32(), -123);
@@ -553,7 +568,7 @@ mod test
 
         let cpon1 = r#"<1:123,2:"foo","bar":"baz">42"#;
         let rv = cpon1.from_cpon().unwrap();
-        let cpon2 = rv.to_cpon();
+        let cpon2 = rv.to_cpon_string().unwrap();
         assert_eq!(cpon1, cpon2);
     }
 
