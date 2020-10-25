@@ -26,7 +26,7 @@ type ReadValueResult = Result<Value, ReaderError>;
 
 pub struct Reader<'a, R>
 {
-    read: &'a mut R,
+    reader: &'a mut R,
     peeked: Option<u8> ,
     line: usize,
     col: usize,
@@ -35,9 +35,9 @@ pub struct Reader<'a, R>
 impl<'a, R> Reader<'a, R>
     where R: Read
 {
-    pub fn new(read: &'a mut R) -> Reader<'a, R> {
+    pub fn new(reader: &'a mut R) -> Reader<'a, R> {
         Reader {
-            read,
+            reader,
             peeked: None,
             line: 0,
             col: 0,
@@ -76,7 +76,7 @@ impl<'a, R> Reader<'a, R>
         }
         return Ok(rv)
     }
-    pub fn read_meta(&mut self) -> Result<MetaMap, ReaderError> {
+    fn read_meta(&mut self) -> Result<MetaMap, ReaderError> {
         self.get_byte()?; // eat '<'
         let mut map = MetaMap::new();
         loop {
@@ -225,7 +225,7 @@ impl<'a, R> Reader<'a, R>
             return Ok(b)
         }
         let mut arr: [u8; 1] = [0];
-        let r = self.read.read(&mut arr);
+        let r = self.reader.read(&mut arr);
         match r {
             Ok(n) => {
                 if n == 0 {
@@ -249,7 +249,7 @@ impl<'a, R> Reader<'a, R>
             return b
         }
         let mut arr: [u8; 1] = [0];
-        let r = self.read.read(&mut arr);
+        let r = self.reader.read(&mut arr);
         match r {
             Ok(n) => {
                 if n == 0 {

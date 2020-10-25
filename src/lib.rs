@@ -3,8 +3,8 @@ mod decimal;
 mod metamap;
 mod rpcvalue;
 mod cpon;
+pub mod chainpack;
 
-pub use cpon::writer::Writer;
 pub use rpcvalue::{RpcValue};
 pub use datetime::{DateTime};
 pub use decimal::{Decimal};

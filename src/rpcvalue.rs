@@ -39,7 +39,7 @@ pub enum Value {
 	Decimal(Decimal),
 	//String(Box<String>),
 	List(Box<Vec<RpcValue>>),
-	Bytes(Box<Vec<u8>>),
+	Blob(Box<Vec<u8>>),
 	Map(Box<HashMap<String, RpcValue>>),
 	IMap(Box<HashMap<i32, RpcValue>>),
 }
@@ -54,7 +54,7 @@ impl Value {
 			Value::Bool(_) => "Bool",
 			Value::DateTime(_) => "DateTime",
 			Value::Decimal(_) => "Decimal",
-			Value::Bytes(_) => "Bytes",
+			Value::Blob(_) => "Blob",
 			Value::List(_) => "List",
 			Value::Map(_) => "Map",
 			Value::IMap(_) => "IMap",
@@ -68,13 +68,13 @@ pub trait FromValue {
 
 impl FromValue for Value { fn make_value(self) -> Value { self } }
 impl FromValue for () { fn make_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn make_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
-impl FromValue for &String { fn make_value(self) -> Value { Value::Bytes(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for &str { fn make_value(self) -> Value { Value::Blob(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for &String { fn make_value(self) -> Value { Value::Blob(Box::new(self.as_bytes().to_vec())) } }
 impl FromValue for i32 { fn make_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for usize { fn make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
 	fn make_value(self) -> Value {
-		Value::DateTime(DateTime::from_epoch_msec(self.timestamp_millis(), 0))
+		Value::DateTime(DateTime::from_epoch_msec(self.timestamp_millis()))
 	}
 }
 impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
@@ -110,7 +110,7 @@ macro_rules! from_value_box {
     };
 }
 
-from_value_box!(Vec<u8>, Bytes);
+from_value_box!(Vec<u8>, Blob);
 from_value_box!(Vec<RpcValue>, List);
 from_value_box!(HashMap<String, RpcValue>, Map);
 from_value_box!(HashMap<i32, RpcValue>, IMap);
@@ -209,7 +209,7 @@ impl RpcValue {
 	}
 	pub fn to_str(&self) -> &str {
 		match &self.value {
-			Value::Bytes(b) => {
+			Value::Blob(b) => {
 				let a: &[u8] = b;
 				std::str::from_utf8(a).unwrap()
 			},
@@ -218,7 +218,7 @@ impl RpcValue {
 	}
 	pub fn to_bytes(&self) -> &[u8] {
 		match &self.value {
-			Value::Bytes(b) => {
+			Value::Blob(b) => {
 				let a: &[u8] = b;
 				a
 			},
@@ -227,7 +227,7 @@ impl RpcValue {
 	}
 	pub fn to_string(&self) -> Result<String, FromUtf8Error> {
 		match &self.value {
-			Value::Bytes(b) => {
+			Value::Blob(b) => {
 				let c = b.as_ref();
 				return String::from_utf8(b.as_ref().clone())
 			},

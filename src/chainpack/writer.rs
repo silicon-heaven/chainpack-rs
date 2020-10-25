@@ -4,18 +4,18 @@ use crate::rpcvalue::Value;
 use std::string::FromUtf8Error;
 use std::collections::HashMap;
 use chrono::{NaiveDateTime, Datelike};
+use crate::chainpack::{CPWriter, PackingSchema};
 //use std::slice::Iter;
 //use std::intrinsics::write_bytes;
 
 pub type WriterResult = std::io::Result<usize>;
 
-pub struct Writer<'a, 'b, W>
+pub struct Writer<'a, W>
 {
-    write: &'a mut W,
-    pub indent: &'b str,
+    writer: &'a mut W,
 }
 
-pub fn to_cpon(rv: &RpcValue) -> Vec<u8>
+pub fn to_chainpack(rv: &RpcValue) -> Vec<u8>
 {
     let mut buff = Vec::new();
     let mut wr = Writer::new(&mut buff);
@@ -25,55 +25,153 @@ pub fn to_cpon(rv: &RpcValue) -> Vec<u8>
     }
     return Vec::new()
 }
-pub fn to_cpon_string(rv: &RpcValue) -> Result<String, FromUtf8Error> {
-    let cp = to_cpon(rv);
-    String::from_utf8(cp)
-}
 
-impl<'a, 'b, W> Writer<'a, 'b, W>
-where W: io::Write
+impl<'a, W> Writer<'a, W>
+    where W: 'a + io::Write
 {
-    pub fn new(write: &'a mut W) -> Writer<'a, 'b, W> {
+    pub fn new(write: &'a mut W) -> Writer<'a, W> {
         const EMPTY: &'static str = "";
         Writer {
-            write,
-            indent: EMPTY,
+            writer: write,
         }
     }
 
-    pub fn write_meta(&mut self, map: &MetaMap) -> WriterResult
-    {
-        let mut cnt: usize = 0;
-        cnt += self.write_byte(b'<')?;
-        let mut n = 0;
-        for k in map.0.iter() {
-            if n == 0 {
-                n += 1;
-            } else {
-                cnt += self.write_byte(b',')?;
-            }
-            if !self.indent.is_empty() {
-                cnt += self.write_byte(b'\n')?;
-                cnt += self.write.write(self.indent.as_bytes())?;
-            }
-
-            match &k.key {
-                MetaKey::String(s) => {
-                    cnt += self.write_bytes_escaped(s.as_bytes())?;
-                },
-                MetaKey::Int(i) => cnt += self.write.write(i.to_string().as_bytes())?,
-            }
-            cnt += self.write_byte(b':')?;
-            cnt += self.write(&k.value)?;
-            n += 1;
+    // see https://en.wikipedia.org/wiki/Find_first_set#CLZ
+    fn significant_bits_part_length(num: u64) -> u32 {
+        let mut len = 0;
+        let mut n = num;
+        if (n & 0xFFFFFFFF00000000) != 0 {
+            len += 32;
+            n >>= 32;
         }
-        if !self.indent.is_empty() {
-            cnt += self.write_byte(b'\n')?;
+        if (n & 0xFFFF0000) != 0 {
+            len += 16;
+            n >>= 16;
         }
-        cnt += self.write_byte(b'>')?;
+        if (n & 0xFF00) != 0 {
+            len += 8;
+            n >>= 8;
+        }
+        if (n & 0xF0) != 0 {
+            len += 4;
+            n >>= 4;
+        }
+        const SIG_TABLE_4BIT: [u8; 16] =  [ 0, 1, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4 ];
+        len += SIG_TABLE_4BIT[n as usize];
+        return len as u32
+    }
+    // number of bytes needed to encode bit_len
+    fn bytes_needed(bit_len: u32) -> u32 {
+        let mut cnt = 0;
+        if bit_len <= 28 {
+            cnt = (bit_len - 1) / 7 + 1;
+        } else {
+            cnt = (bit_len - 1) / 8 + 2;
+        }
+        return cnt
+    }
+    // return max bit length >= bit_len, which can be encoded by same number of bytes
+    fn expand_bit_len(bit_len: u32) -> u32 {
+        let byte_cnt = Self::bytes_needed(bit_len);
+        if bit_len <= 28 {
+            byte_cnt * (8 - 1) - 1
+        } else {
+            (byte_cnt - 1) * 8 - 1
+        }
+    }
+    /** UInt
+    0 ...  7 bits  1  byte  |0|x|x|x|x|x|x|x|<-- LSB
+    8 ... 14 bits  2  bytes |1|0|x|x|x|x|x|x| |x|x|x|x|x|x|x|x|<-- LSB
+    15 ... 21 bits  3  bytes |1|1|0|x|x|x|x|x| |x|x|x|x|x|x|x|x| |x|x|x|x|x|x|x|x|<-- LSB
+    22 ... 28 bits  4  bytes |1|1|1|0|x|x|x|x| |x|x|x|x|x|x|x|x| |x|x|x|x|x|x|x|x| |x|x|x|x|x|x|x|x|<-- LSB
+    29+       bits  5+ bytes |1|1|1|1|n|n|n|n| |x|x|x|x|x|x|x|x| |x|x|x|x|x|x|x|x| |x|x|x|x|x|x|x|x| ... <-- LSB
+                    n ==  0 ->  4 bytes number (32 bit number)
+                    n ==  1 ->  5 bytes number
+                    n == 14 -> 18 bytes number
+                    n == 15 -> for future (number of bytes will be specified in next byte)
+    */
+    pub fn write_uint_data_helper(&mut self, number: u64, bit_len: u32) -> WriterResult {
+        const BYTE_CNT_MAX: u32 = 32;
+        let byte_cnt = Self::bytes_needed(bit_len);
+        assert!(byte_cnt <= BYTE_CNT_MAX, format!("Max int byte size {} exceeded", BYTE_CNT_MAX));
+        let mut bytes: [u8; BYTE_CNT_MAX as usize] = [0; BYTE_CNT_MAX as usize];
+        let mut num = number;
+        let mut len = 0;
+        for i in (0 .. byte_cnt).rev() {
+            let r = (num & 255) as u8;
+            bytes[i as usize] = r;
+            num = num >> 8;
+            len = i;
+        }
+        if bit_len <= 28 {
+            let mut mask = (0xf0 << (4 - byte_cnt));
+            bytes[0] = bytes[0] & ((!mask) as u8);
+            mask <<= 1;
+            bytes[0] |= mask;
+        }
+        else {
+            bytes[0] = (0xf0 | (byte_cnt - 5)) as u8;
+        }
+        let mut cnt = 0;
+        for i in 0 .. byte_cnt {
+            let r = bytes[i as usize];
+            cnt += self.write_byte(r)?;
+        }
+        return Ok(cnt)
+    }
+    pub fn write_uint_data(&mut self, number: u64) -> WriterResult {
+        let bitlen = Self::significant_bits_part_length(number);
+        let cnt = self.write_uint_data_helper(number, bitlen)?;
         Ok(cnt)
     }
-    pub fn write(&mut self, val: &RpcValue) -> WriterResult
+    pub fn write_int_data(&mut self, number: i64) -> WriterResult {
+        let mut num;
+        let neg;
+        if number < 0 {
+            num = (-number) as u64;
+            neg = true;
+        } else {
+            num = number as u64;
+            neg = false;
+        };
+
+        let bitlen = Self::significant_bits_part_length(num as u64) + 1; // add sign bit
+        if neg {
+            let sign_pos = Self::expand_bit_len(bitlen);
+            let sign_bit_mask = (1 as u64) << sign_pos;
+            num |= sign_bit_mask;
+        }
+        let cnt = self.write_uint_data_helper(num as u64, bitlen)?;
+        Ok(cnt)
+    }
+}
+
+impl<'a, W> CPWriter for Writer<'a, W>
+where W: io::Write
+{
+    fn write_blob(&mut self, blob: &[u8]) -> WriterResult {
+        let mut cnt = self.write_uint_data(blob.len() as u64)?;
+        cnt += self.write_bytes(blob)?;
+        Ok(cnt)
+    }
+
+    fn write_meta(&mut self, map: &MetaMap) -> WriterResult
+    {
+        let mut cnt: usize = 0;
+        cnt += self.write_byte(PackingSchema::MetaMap as u8)?;
+        for k in map.0.iter() {
+            match &k.key {
+                MetaKey::String(s) => {
+                    cnt += self.write_blob(s.as_bytes())?;
+                },
+                MetaKey::Int(i) => cnt += self.write_int(*i as i64)?,
+            }
+            cnt += self.write(&k.value)?;
+        }
+        cnt += self.write_byte(PackingSchema::TERM as u8)?;
+        Ok(cnt)
+    }
+    fn write(&mut self, val: &RpcValue) -> WriterResult
     {
         let mm = val.meta();
         let mut cnt: usize = 0;
@@ -87,18 +185,15 @@ where W: io::Write
     {
         let mut cnt: usize = 0;
         match val {
-            Value::Null => cnt += self.write.write("null".as_bytes())?,
+            Value::Null => cnt += self.write_byte(PackingSchema::Null as u8)?,
             Value::Bool(b) => cnt += if *b {
-                self.write.write("true".as_bytes())?
+                self.write_byte(PackingSchema::TRUE as u8)?
             } else {
-                self.write.write("false".as_bytes())?
+                self.write_byte(PackingSchema::FALSE as u8)?
             },
             Value::Int(n) => cnt += self.write_int(*n)?,
-            Value::UInt(n) => {
-                cnt += self.write_uint(*n)?;
-                cnt += self.write_byte(b'u')?;
-            },
-            Value::Blob(b) => cnt += self.write_bytes_escaped(b)?,
+            Value::UInt(n) => cnt += self.write_uint(*n)?,
+            Value::Blob(b) => cnt += self.write_blob(b)?,
             Value::Double(n) => cnt += self.write_double(*n)?,
             Value::Decimal(d) => cnt += self.write_decimal(d)?,
             Value::DateTime(d) => cnt += self.write_datetime(d)?,
@@ -112,66 +207,40 @@ where W: io::Write
     {
         let mut arr: [u8; 1] = [0];
         arr[0] = b;
-        self.write.write(&arr)
+        self.writer.write(&arr)
     }
     fn write_bytes(&mut self, arr: &[u8]) -> WriterResult
     {
-        self.write.write(&arr)
+        self.writer.write(&arr)
     }
     fn write_int(&mut self, n: i64) -> WriterResult
     {
-        let s = n.to_string();
-        let cnt = self.write.write(s.as_bytes())?;
+        let mut cnt = 0;
+        if n < 64 {
+            cnt += self.write_byte(((n % 64) + 64) as u8)?;
+        }
+        else {
+            cnt += self.write_byte(PackingSchema::Int as u8)?;
+            cnt += self.write_int_data(n)?;
+        }
         Ok(cnt)
     }
     fn write_uint(&mut self, n: u64) -> WriterResult
     {
-        let s = n.to_string();
-        let cnt = self.write.write(s.as_bytes())?;
+        let mut cnt = 0;
+        if n < 64 {
+            cnt += self.write_byte((n % 64) as u8)?;
+        }
+        else {
+            cnt += self.write_byte(PackingSchema::UInt as u8)?;
+            cnt += self.write_uint_data(n)?;
+        }
         Ok(cnt)
     }
     fn write_double(&mut self, n: f64) -> WriterResult
     {
         let s = n.to_string();
-        let cnt = self.write.write(s.as_bytes())?;
-        Ok(cnt)
-    }
-    fn write_bytes_escaped(&mut self, bytes: &[u8]) -> WriterResult
-    {
-        let mut cnt: usize = 0;
-        cnt += self.write_byte(b'"')?;
-        for b in bytes {
-            match b {
-                0 => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'0')?;
-                }
-                b'\\' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'\\')?;
-                }
-                b'\t' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b't')?;
-                }
-                b'\r' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'r')?;
-                }
-                b'\n' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'n')?;
-                }
-                b'"' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'"')?;
-                }
-                _ => {
-                    cnt += self.write_byte(*b)?;
-                }
-            }
-        }
-        cnt += self.write_byte(b'"')?;
+        let cnt = self.writer.write(s.as_bytes())?;
         Ok(cnt)
     }
     fn write_decimal(&mut self, decimal: &Decimal) -> WriterResult {
@@ -276,7 +345,7 @@ where W: io::Write
             } else {
                 cnt += self.write_byte(b',')?;
             }
-            cnt += self.write_bytes_escaped(k.as_bytes())?;
+            cnt += self.write_bytes(k.as_bytes())?;
             cnt += self.write_byte(b':')?;
             cnt += self.write(v)?;
         }
@@ -302,20 +371,5 @@ where W: io::Write
         cnt += self.write_byte(b'}')?;
         Ok(cnt)
     }
-}
-
-#[cfg(test)]
-mod test
-{
-    use crate::cpon::writer::{Writer, to_cpon, to_cpon_string};
-    use crate::{MetaMap, RpcValue, DateTime};
-
-    #[test]
-    fn write() {
-        let dt = DateTime::from_epoch_msec(0);
-        let cpon = r#"d"1970-01-01T00:00:00Z""#;
-        assert_eq!(RpcValue::new(dt).to_cpon_string().unwrap(), cpon);
-    }
-
 }
 
