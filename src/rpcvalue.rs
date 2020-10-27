@@ -252,12 +252,12 @@ impl RpcValue {
 			_ => &EMPTY_IMAP_REF,
 		}
 	}
-	pub fn to_cpon(&self) -> Vec<u8> {
-		crate::cpon::writer::to_cpon(self)
-	}
-	pub fn to_cpon_string(&self) -> Result<String, FromUtf8Error> {
-		crate::cpon::writer::to_cpon_string(self)
-	}
+	// pub fn to_cpon(&self) -> Vec<u8> {
+	// 	crate::cpon::writer::to_cpon(self)
+	// }
+	// pub fn to_cpon_string(&self) -> Result<String, FromUtf8Error> {
+	// 	crate::cpon::writer::to_cpon_string(self)
+	// }
 }
 
 impl fmt::Debug for RpcValue {
