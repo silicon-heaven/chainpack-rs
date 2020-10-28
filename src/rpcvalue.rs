@@ -10,6 +10,8 @@ use crate::reader::Reader;
 use crate::{CponReader, ReadResult};
 use crate::writer::Writer;
 use crate::CponWriter;
+use crate::chainpackwriter::ChainPackWriter;
+use crate::chainpackreader::ChainPackReader;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
@@ -244,6 +246,24 @@ impl RpcValue {
 			Err(e) => String::new(),
 		}
 	}
+	pub fn to_chainpack(&self) -> Vec<u8> {
+		let mut buff: Vec<u8> = Vec::new();
+		let mut wr = ChainPackWriter::new(&mut buff);
+		wr.write(self);
+		buff
+	}
+
+	pub fn from_cpon(s: &str) -> ReadResult {
+		let mut buff = s.as_bytes();
+		let mut rd = CponReader::new(&mut buff);
+		rd.read()
+	}
+	pub fn from_chainpack(b: &[u8]) -> ReadResult {
+		let mut buff = b;
+		let mut rd = ChainPackReader::new(&mut buff);
+		rd.read()
+	}
+
 }
 
 impl fmt::Debug for RpcValue {
@@ -255,18 +275,6 @@ impl fmt::Debug for RpcValue {
 impl fmt::Display for RpcValue {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "{}", self.to_cpon())
-	}
-}
-
-pub trait ToRpcValue {
-	fn to_rpcvalue(self) -> ReadResult;
-}
-
-impl ToRpcValue for &str {
-	fn to_rpcvalue(self) -> ReadResult {
-		let mut buff = self.as_bytes();
-		let mut rd = CponReader::new(&mut buff);
-		rd.read()
 	}
 }
 

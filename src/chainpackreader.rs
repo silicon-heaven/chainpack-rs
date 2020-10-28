@@ -1,21 +1,20 @@
 use std::io::Read;
 use crate::reader::{ByteReader, Reader, ReadError, ReadResult};
-use crate::{RpcValue, MetaMap, Value, Decimal, DateTime};
+use crate::{RpcValue, MetaMap, Value, Decimal};
 use crate::rpcvalue::FromValue;
 use std::collections::HashMap;
-use std::string::String;
 
-pub struct CponReader<'a, R>
-where R: Read
+pub struct ChainPackReader<'a, R>
+    where R: Read
 {
     byte_reader: ByteReader<'a, R>,
 }
 
-impl<'a, R> CponReader<'a, R>
+impl<'a, R> ChainPackReader<'a, R>
     where R: Read
 {
     pub fn new(read: &'a mut R) -> Self {
-        CponReader { byte_reader: ByteReader::new(read) }
+        ChainPackReader { byte_reader: ByteReader::new(read) }
     }
 
     fn peek_byte(&mut self) -> u8 {
@@ -28,60 +27,6 @@ impl<'a, R> CponReader<'a, R>
         self.byte_reader.make_error(msg)
     }
 
-    fn skip_white_insignificant(&mut self) -> Result<(), ReadError> {
-        loop {
-            let b = self.peek_byte();
-            if b == 0 {
-                break;
-            }
-            if b > b' ' {
-                match b {
-                    b'/' => {
-                        let b = self.get_byte()?;
-                        match b {
-                            b'*' => {
-                                // multiline_comment_entered
-                                loop {
-                                    let b = self.get_byte()?;
-                                    if b == b'*' {
-                                        let b = self.get_byte()?;
-                                        if b == b'/' {
-                                            break;
-                                        }
-                                    }
-                                }
-                            }
-                            b'/' => {
-                                // to end of line comment entered
-                                loop {
-                                    let b = self.get_byte()?;
-                                    if b == b'\n' {
-                                        break;
-                                    }
-                                }
-                            }
-                            _ => {
-                                return Err(self.make_error("Malformed comment"))
-                            }
-                        }
-                    }
-                    b':' => {
-                        self.get_byte()?; // skip key delimiter
-                    }
-                    b',' => {
-                        self.get_byte()?; // skip val delimiter
-                    }
-                    _ => {
-                        break;
-                    }
-                }
-            }
-            else {
-                self.get_byte()?;
-            }
-        }
-        return Ok(())
-    }
     fn read_string(&mut self) -> Result<Value, ReadError> {
         let mut buff: Vec<u8> = Vec::new();
         self.get_byte()?; // eat "
@@ -263,7 +208,6 @@ impl<'a, R> CponReader<'a, R>
         let mut lst = Vec::new();
         self.get_byte()?; // eat '['
         loop {
-            self.skip_white_insignificant()?;
             let b = self.peek_byte();
             if b == b']' {
                 self.get_byte()?;
@@ -279,7 +223,6 @@ impl<'a, R> CponReader<'a, R>
         let mut map: HashMap<String, RpcValue> = HashMap::new();
         self.get_byte()?; // eat '{'
         loop {
-            self.skip_white_insignificant()?;
             let b = self.peek_byte();
             if b == b'}' {
                 self.get_byte()?;
@@ -295,7 +238,6 @@ impl<'a, R> CponReader<'a, R>
                 },
                 _ => return Err(self.make_error(&format!("Invalid Map key '{}'", b))),
             };
-            self.skip_white_insignificant()?;
             let val = self.read()?;
             map.insert(*skey.clone(), val);
         }
@@ -309,61 +251,19 @@ impl<'a, R> CponReader<'a, R>
         }
         let mut map: HashMap<i32, RpcValue> = HashMap::new();
         loop {
-            self.skip_white_insignificant()?;
             let b = self.peek_byte();
             if b == b'}' {
                 self.get_byte()?;
                 break;
             }
             let key = self.read_int()?.0;
-            self.skip_white_insignificant()?;
             let val = self.read()?;
             map.insert(key as i32, val);
         }
         return Ok(map.make_value())
     }
     fn read_datetime(&mut self) -> Result<Value, ReadError> {
-        self.get_byte()?; // eat 'd'
-        let v = self.read_string()?;
-        if let Value::String(s) = v {
-            const PATTERN: &'static str = "2020-02-03T11:59:43";
-            if s.len() >= PATTERN.len() {
-                let naive_str = &s[..PATTERN.len()];
-                if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(naive_str, "%Y-%m-%dT%H:%M:%S") {
-                    let mut msec = 0;
-                    let mut offset = 0;
-                    let mut rest = &naive_str[PATTERN.len()..];
-                    if rest.len() > 0 && rest.as_bytes()[1] == b'.' {
-                        rest = &rest[1..];
-                        if rest.len() >= 3 {
-                            if let Ok(msec) = rest[..3].parse::<i32>() {
-                                rest = &rest[3..];
-                            } else {
-                                return Err(self.make_error(&format!("Invalid DateTime msec part: '{}", rest)))
-                            }
-                        }
-                        if rest.len() == 3 {
-                            if let Ok(hrs) = rest.parse::<i32>() {
-                                offset = 60 * 60 * hrs;
-                            } else {
-                                return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
-                            }
-                        }
-                        if rest.len() == 5 {
-                            if let Ok(hrs) = rest.parse::<i32>() {
-                                offset = 60 * (60 * (hrs / 60) + (hrs % 60));
-                            } else {
-                                return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
-                            }
-                        }
-                    }
-                    let dt = DateTime::from_epoch_msec_tz(ndt.timestamp(), offset);
-                    return Ok(dt.make_value())
-                 }
-            }
-            return Err(self.make_error(&format!("Invalid DateTime: '{}", s)))
-        }
-        return Err(self.make_error("Invalid DateTime"))
+        unimplemented!()
     }
     fn read_true(&mut self) -> Result<Value, ReadError> {
         self.read_token("true")?;
@@ -389,16 +289,14 @@ impl<'a, R> CponReader<'a, R>
 
 }
 
-impl<'a, R> Reader for CponReader<'a, R>
+impl<'a, R> Reader for ChainPackReader<'a, R>
     where R: Read
 {
     fn read(&mut self) -> ReadResult {
-        self.skip_white_insignificant()?;
         let mut b = self.peek_byte();
         let mut mm: Option<MetaMap> = None;
         if b == b'<' {
             mm = Some(self.read_meta()?);
-            self.skip_white_insignificant()?;
             b = self.peek_byte();
         }
         let v = match &b {
@@ -423,14 +321,12 @@ impl<'a, R> Reader for CponReader<'a, R>
         self.get_byte()?; // eat '<'
         let mut map = MetaMap::new();
         loop {
-            self.skip_white_insignificant()?;
             let b = self.peek_byte();
             if b == b'>' {
                 self.get_byte()?;
                 break;
             }
             let key = self.read()?;
-            self.skip_white_insignificant()?;
             let val = self.read()?;
             if key.is_int() {
                 map.insert(key.to_i32(), val);
@@ -442,7 +338,6 @@ impl<'a, R> Reader for CponReader<'a, R>
         Ok(map)
     }
     fn read_value(&mut self) -> Result<Value, ReadError> {
-        self.skip_white_insignificant()?;
         let b = self.peek_byte();
         let v = match &b {
             b'0' ..= b'9' | b'+' | b'-' => self.read_number(),
@@ -460,71 +355,3 @@ impl<'a, R> Reader for CponReader<'a, R>
     }
 }
 
-#[cfg(test)]
-mod test
-{
-    use crate::{MetaMap, RpcValue};
-    use crate::Decimal;
-    use std::collections::HashMap;
-    use crate::rpcvalue::ToRpcValue;
-    use crate::cponreader::CponReader;
-    use crate::reader::Reader;
-
-    #[test]
-    fn test_read() {
-        assert_eq!("null".to_rpcvalue().unwrap().is_null(), true);
-        assert_eq!("false".to_rpcvalue().unwrap().to_bool(), false);
-        assert_eq!("true".to_rpcvalue().unwrap().to_bool(), true);
-        assert_eq!("0".to_rpcvalue().unwrap().to_i32(), 0);
-        assert_eq!("123".to_rpcvalue().unwrap().to_i32(), 123);
-        assert_eq!("-123".to_rpcvalue().unwrap().to_i32(), -123);
-        assert_eq!("+123".to_rpcvalue().unwrap().to_i32(), 123);
-        assert_eq!("123u".to_rpcvalue().unwrap().to_u32(), 123u32);
-        assert_eq!("0xFF".to_rpcvalue().unwrap().to_i32(), 255);
-        assert_eq!("-0x1000".to_rpcvalue().unwrap().to_i32(), -4096);
-        assert_eq!("123.4".to_rpcvalue().unwrap().to_decimal(), Decimal::new(1234, -1));
-        assert_eq!("0.123".to_rpcvalue().unwrap().to_decimal(), Decimal::new(123, -3));
-        assert_eq!("-0.123".to_rpcvalue().unwrap().to_decimal(), Decimal::new(-123, -3));
-        assert_eq!("0e0".to_rpcvalue().unwrap().to_decimal(), Decimal::new(0, 0));
-        assert_eq!("0.123e3".to_rpcvalue().unwrap().to_decimal(), Decimal::new(123, 0));
-        assert_eq!("1000000.".to_rpcvalue().unwrap().to_decimal(), Decimal::new(1000000, 0));
-
-        assert_eq!(r#""foo""#.to_rpcvalue().unwrap().to_str(), "foo");
-        assert_eq!(r#""ěščřžýáí""#.to_rpcvalue().unwrap().to_str(), "ěščřžýáí");
-        assert_eq!("\"foo\tbar\nbaz\"".to_rpcvalue().unwrap().to_str(), "foo\tbar\nbaz");
-        assert_eq!(r#""foo\"bar""#.to_rpcvalue().unwrap().to_str(), r#"foo"bar"#);
-
-        let lst1 = vec![RpcValue::new(123), RpcValue::new("foo")];
-        let cpon = r#"[123 , "foo"]"#;
-        let rv = cpon.to_rpcvalue().unwrap();
-        let lst2 = rv.to_list();
-        assert_eq!(lst2, &lst1);
-
-        let mut map: HashMap<String, RpcValue> = HashMap::new();
-        map.insert("foo".to_string(), RpcValue::new(123));
-        map.insert("bar".to_string(), RpcValue::new("baz"));
-        let cpon = r#"{"foo": 123,"bar":"baz"}"#;
-        assert_eq!(cpon.to_rpcvalue().unwrap().to_map(), &map);
-
-        let mut map: HashMap<i32, RpcValue> = HashMap::new();
-        map.insert(1, RpcValue::new(123));
-        map.insert(2, RpcValue::new("baz"));
-        let cpon = r#"i{1: 123,2:"baz"}"#;
-        assert_eq!(cpon.to_rpcvalue().unwrap().to_imap(), &map);
-
-        let cpon = r#"<1: 123,2:"baz">"#;
-        let mut b = cpon.as_bytes();
-        let mut rd = CponReader::new(&mut b);
-        let mm1 = rd.read_meta().unwrap();
-        let mut mm2 = MetaMap::new();
-        mm2.insert(1, RpcValue::new(123));
-        mm2.insert(2, RpcValue::new("baz"));
-        assert_eq!(mm1, mm2);
-
-        //let cpon1 = r#"<1:123,2:"foo","bar":"baz">42"#;
-        //let rv = cpon1.to_rpcvalue().unwrap();
-        //let cpon2 = rv.to_cpon_string().unwrap();
-        //assert_eq!(cpon1, cpon2);
-    }
-
-}
