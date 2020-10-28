@@ -1,6 +1,5 @@
-use chainpack::RpcValue;
-use chainpack::cponreader::{CponReader};
-use chainpack::reader::{Reader};
+use chainpack::{RpcValue, ToRpcValue};
+use chainpack::CponReader;
 
 fn to_bin(v: &[u8]) -> String {
     let mut s = String::new();
@@ -14,10 +13,8 @@ fn to_bin(v: &[u8]) -> String {
 }
 
 fn main() {
-    let cpon = "[12 0x3]";
-    let mut buff = cpon.as_bytes();
-    let mut rd = CponReader::new(&mut buff);
-    //let res = CPReader::read(&mut rd);
-    let res = rd.read().expect("neco-neco");
-    println!("value: {:?}", res);
+    let cpon = r#"<1:"foo">[12 0x3]"#;
+    let rv = cpon.to_rpcvalue().unwrap();
+    //let cv = rv.to_cpon().unwrap();
+    println!("value: {}", rv);
 }

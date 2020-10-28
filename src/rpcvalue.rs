@@ -6,8 +6,10 @@ use lazy_static::lazy_static;
 use crate::datetime::DateTime;
 use crate::decimal::Decimal;
 use crate::metamap::MetaMap;
-use crate::cponreader::CponReader;
-use crate::reader::{Reader, ReadResult};
+use crate::reader::Reader;
+use crate::{CponReader, ReadResult};
+use crate::writer::Writer;
+use crate::CponWriter;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
@@ -233,17 +235,26 @@ impl RpcValue {
 			_ => &EMPTY_IMAP_REF,
 		}
 	}
-	//pub fn to_cpon(&self) -> Vec<u8> {
-	//	CponWriter::to_cpon(&self)
-	//}
-	//pub fn to_cpon_string(&self) -> Result<String, FromUtf8Error> {
-	//	CponWriter::to_cpon_string(&self)
-	//}
+	pub fn to_cpon(&self) -> String {
+		let mut buff: Vec<u8> = Vec::new();
+		let mut wr = CponWriter::new(&mut buff);
+		wr.write(self);
+		match String::from_utf8(buff) {
+			Ok(s) => s,
+			Err(e) => String::new(),
+		}
+	}
 }
 
 impl fmt::Debug for RpcValue {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "RpcValue {{meta: {:?} value: {:?}}}", self.meta, self.value)
+		//write!(f, "RpcValue {{meta: {:?} value: {:?}}}", self.meta, self.value)
+		write!(f, "{}", self.to_cpon())
+	}
+}
+impl fmt::Display for RpcValue {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.to_cpon())
 	}
 }
 

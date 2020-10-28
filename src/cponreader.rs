@@ -1,7 +1,6 @@
 use std::io::Read;
-use crate::reader::{ByteReader, Reader, ReadError, ReadValueResult};
+use crate::reader::{ByteReader, Reader, ReadError, ReadResult};
 use crate::{RpcValue, MetaMap, Value, Decimal};
-use crate::reader::ReadResult;
 use crate::rpcvalue::FromValue;
 use std::collections::HashMap;
 
@@ -82,7 +81,7 @@ impl<'a, R> CponReader<'a, R>
         }
         return Ok(())
     }
-    fn read_string(&mut self) -> ReadValueResult {
+    fn read_string(&mut self) -> Result<Value, ReadError> {
         let mut buff: Vec<u8> = Vec::new();
         self.get_byte()?; // eat "
         loop {
@@ -178,7 +177,7 @@ impl<'a, R> CponReader<'a, R>
         }
         Ok((val, digit_cnt))
     }
-    fn read_number(&mut self) -> ReadValueResult
+    fn read_number(&mut self) -> Result<Value, ReadError>
     {
         let mut mantisa = 0;
         let mut exponent = 0;
@@ -258,7 +257,7 @@ impl<'a, R> CponReader<'a, R>
         if is_neg { mantisa = -mantisa }
         return Ok(mantisa.make_value())
     }
-    fn read_list(&mut self) -> ReadValueResult
+    fn read_list(&mut self) -> Result<Value, ReadError>
     {
         let mut lst = Vec::new();
         self.get_byte()?; // eat '['
@@ -275,7 +274,7 @@ impl<'a, R> CponReader<'a, R>
         return Ok(lst.make_value())
     }
 
-    fn read_map(&mut self) -> ReadValueResult {
+    fn read_map(&mut self) -> Result<Value, ReadError> {
         let mut map: HashMap<String, RpcValue> = HashMap::new();
         self.get_byte()?; // eat '{'
         loop {
@@ -301,7 +300,7 @@ impl<'a, R> CponReader<'a, R>
         }
         return Ok(map.make_value())
     }
-    fn read_imap(&mut self) -> ReadValueResult {
+    fn read_imap(&mut self) -> Result<Value, ReadError> {
         self.get_byte()?; // eat 'i'
         let b = self.get_byte()?; // eat '{'
         if b != b'{' {
@@ -322,18 +321,18 @@ impl<'a, R> CponReader<'a, R>
         }
         return Ok(map.make_value())
     }
-    fn read_datetime(&mut self) -> ReadValueResult {
+    fn read_datetime(&mut self) -> Result<Value, ReadError> {
         unimplemented!()
     }
-    fn read_true(&mut self) -> ReadValueResult {
+    fn read_true(&mut self) -> Result<Value, ReadError> {
         self.read_token("true")?;
         return Ok(true.make_value())
     }
-    fn read_false(&mut self) -> ReadValueResult {
+    fn read_false(&mut self) -> Result<Value, ReadError> {
         self.read_token("false")?;
         return Ok(false.make_value())
     }
-    fn read_null(&mut self) -> ReadValueResult {
+    fn read_null(&mut self) -> Result<Value, ReadError> {
         self.read_token("null")?;
         return Ok(().make_value())
     }

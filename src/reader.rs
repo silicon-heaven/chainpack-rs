@@ -83,11 +83,11 @@ where R: Read
     }
 }
 
-pub(crate) type ReadResult = Result<RpcValue, ReadError>;
-pub(crate) type ReadValueResult = Result<Value, ReadError>;
+pub type ReadResult = Result<RpcValue, ReadError>;
+//pub type ReadValueResult = Result<Value, ReadError>;
 
 pub trait Reader {
     fn read(&mut self) -> ReadResult;
     fn read_meta(&mut self) -> Result<MetaMap, ReadError>;
-    fn read_value(&mut self) -> ReadValueResult;
+    fn read_value(&mut self) -> Result<Value, ReadError>;
 }
