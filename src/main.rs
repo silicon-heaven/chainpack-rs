@@ -1,6 +1,6 @@
 use chainpack::RpcValue;
 use chainpack::cponreader::{CponReader};
-use chainpack::reader::{CPReader};
+use chainpack::reader::{Reader};
 
 fn to_bin(v: &[u8]) -> String {
     let mut s = String::new();

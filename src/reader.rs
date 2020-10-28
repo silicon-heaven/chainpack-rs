@@ -3,14 +3,14 @@ use crate::{MetaMap, RpcValue};
 use crate::rpcvalue::Value;
 
 #[derive(Debug)]
-pub struct ReaderError {
+pub struct ReadError {
     msg: String,
     line: usize,
     col: usize,
 }
-impl ReaderError {
-    fn new(msg: String, line: usize, col: usize) -> ReaderError {
-        ReaderError { msg, line, col }
+impl ReadError {
+    fn new(msg: String, line: usize, col: usize) -> ReadError {
+        ReadError { msg, line, col }
     }
 }
 
@@ -51,7 +51,7 @@ where R: Read
             _ => 0
         }
     }
-    pub(crate) fn get_byte(&mut self) -> Result<u8, ReaderError> {
+    pub(crate) fn get_byte(&mut self) -> Result<u8, ReadError> {
         let ret_b;
         if let Some(b) = self.peeked {
             self.peeked = None;
@@ -78,47 +78,16 @@ where R: Read
         Ok(ret_b)
     }
 
-    pub(crate) fn make_error(&self, msg: &str) -> ReaderError {
-        ReaderError { msg: msg.to_string(), line: self.line, col: self.col }
+    pub(crate) fn make_error(&self, msg: &str) -> ReadError {
+        ReadError { msg: msg.to_string(), line: self.line, col: self.col }
     }
 }
 
-pub(crate) type ReadResult = Result<RpcValue, ReaderError>;
-pub(crate) type ReadValueResult = Result<Value, ReaderError>;
+pub(crate) type ReadResult = Result<RpcValue, ReadError>;
+pub(crate) type ReadValueResult = Result<Value, ReadError>;
 
-pub trait CPReader {
+pub trait Reader {
     fn read(&mut self) -> ReadResult;
-    fn read_meta(&mut self) -> Result<MetaMap, ReaderError>;
+    fn read_meta(&mut self) -> Result<MetaMap, ReadError>;
     fn read_value(&mut self) -> ReadValueResult;
-
-    fn read_blob(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_cstring(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_list(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_map(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_imap(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_datetime(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_true(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_false(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_null(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
-    fn read_number(&mut self) -> ReadValueResult {
-        unimplemented!()
-    }
 }

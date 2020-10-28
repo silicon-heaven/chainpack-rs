@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 use std::fmt;
-use std::string::FromUtf8Error;
 
 use lazy_static::lazy_static;
 
 use crate::datetime::DateTime;
 use crate::decimal::Decimal;
 use crate::metamap::MetaMap;
+use crate::cponreader::CponReader;
+use crate::reader::{Reader, ReadResult};
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
@@ -37,9 +38,9 @@ pub enum Value {
 	Bool(bool),
 	DateTime(DateTime),
 	Decimal(Decimal),
-	//String(Box<String>),
-	List(Box<Vec<RpcValue>>),
+	String(Box<String>),
 	Blob(Box<Vec<u8>>),
+	List(Box<Vec<RpcValue>>),
 	Map(Box<HashMap<String, RpcValue>>),
 	IMap(Box<HashMap<i32, RpcValue>>),
 }
@@ -54,6 +55,7 @@ impl Value {
 			Value::Bool(_) => "Bool",
 			Value::DateTime(_) => "DateTime",
 			Value::Decimal(_) => "Decimal",
+			Value::String(_) => "String",
 			Value::Blob(_) => "Blob",
 			Value::List(_) => "List",
 			Value::Map(_) => "Map",
@@ -68,8 +70,8 @@ pub trait FromValue {
 
 impl FromValue for Value { fn make_value(self) -> Value { self } }
 impl FromValue for () { fn make_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn make_value(self) -> Value { Value::Blob(Box::new(self.as_bytes().to_vec())) } }
-impl FromValue for &String { fn make_value(self) -> Value { Value::Blob(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for &str { fn make_value(self) -> Value { Value::String(Box::new(self.to_string())) } }
+impl FromValue for &String { fn make_value(self) -> Value { Value::String(Box::new(self.clone())) } }
 impl FromValue for i32 { fn make_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for usize { fn make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
@@ -110,7 +112,7 @@ macro_rules! from_value_box {
     };
 }
 
-from_value_box!(Vec<u8>, Blob);
+from_value_box!(String, String);
 from_value_box!(Vec<RpcValue>, List);
 from_value_box!(HashMap<String, RpcValue>, Map);
 from_value_box!(HashMap<i32, RpcValue>, IMap);
@@ -209,29 +211,8 @@ impl RpcValue {
 	}
 	pub fn to_str(&self) -> &str {
 		match &self.value {
-			Value::Blob(b) => {
-				let a: &[u8] = b;
-				std::str::from_utf8(a).unwrap()
-			},
+			Value::String(b) => b,
 			_ => EMPTY_STR_REF,
-		}
-	}
-	pub fn to_bytes(&self) -> &[u8] {
-		match &self.value {
-			Value::Blob(b) => {
-				let a: &[u8] = b;
-				a
-			},
-			_ => EMPTY_BYTES_REF,
-		}
-	}
-	pub fn to_string(&self) -> Result<String, FromUtf8Error> {
-		match &self.value {
-			Value::Blob(b) => {
-				let c = b.as_ref();
-				return String::from_utf8(b.as_ref().clone())
-			},
-			_ => Ok(String::new()),
 		}
 	}
 	pub fn to_list(&self) -> &Vec<RpcValue> {
@@ -252,17 +233,29 @@ impl RpcValue {
 			_ => &EMPTY_IMAP_REF,
 		}
 	}
-	// pub fn to_cpon(&self) -> Vec<u8> {
-	// 	crate::cpon::writer::to_cpon(self)
-	// }
-	// pub fn to_cpon_string(&self) -> Result<String, FromUtf8Error> {
-	// 	crate::cpon::writer::to_cpon_string(self)
-	// }
+	//pub fn to_cpon(&self) -> Vec<u8> {
+	//	CponWriter::to_cpon(&self)
+	//}
+	//pub fn to_cpon_string(&self) -> Result<String, FromUtf8Error> {
+	//	CponWriter::to_cpon_string(&self)
+	//}
 }
 
 impl fmt::Debug for RpcValue {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "RpcValue {{meta: {:?} value: {:?}}}", self.meta, self.value)
+	}
+}
+
+pub trait ToRpcValue {
+	fn to_rpcvalue(self) -> ReadResult;
+}
+
+impl ToRpcValue for &str {
+	fn to_rpcvalue(self) -> ReadResult {
+		let mut buff = self.as_bytes();
+		let mut rd = CponReader::new(&mut buff);
+		rd.read()
 	}
 }
 
