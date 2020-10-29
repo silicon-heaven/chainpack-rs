@@ -4,12 +4,9 @@ mod metamap;
 mod rpcvalue;
 
 pub mod reader;
-pub mod cponreader;
-pub mod chainpackreader;
-
 pub mod writer;
-pub mod cponwriter;
-pub mod chainpackwriter;
+pub mod cpon;
+pub mod chainpack;
 
 pub use rpcvalue::{RpcValue};
 pub use rpcvalue::{Value};
@@ -18,10 +15,9 @@ pub use decimal::{Decimal};
 pub use metamap::{MetaMap};
 pub use reader::{ReadResult};
 pub use writer::{WriteResult};
-pub use cponreader::{CponReader};
-pub use cponwriter::{CponWriter};
-pub use chainpackreader::{ChainPackReader};
-pub use chainpackwriter::{ChainPackWriter};
+pub use cpon::{CponReader};
+pub use cpon::{CponWriter};
+pub use chainpack::{ChainPackReader, ChainPackWriter};
 
 /*
 #[cfg(test)]

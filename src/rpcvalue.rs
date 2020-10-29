@@ -10,8 +10,8 @@ use crate::reader::Reader;
 use crate::{CponReader, ReadResult};
 use crate::writer::Writer;
 use crate::CponWriter;
-use crate::chainpackwriter::ChainPackWriter;
-use crate::chainpackreader::ChainPackReader;
+use crate::chainpack::ChainPackWriter;
+use crate::chainpack::ChainPackReader;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 

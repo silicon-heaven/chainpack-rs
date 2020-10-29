@@ -1,5 +1,5 @@
 [package]
-name = "chainpack"
+name = "chainpackrpc"
 version = "0.1.0"
 authors = ["Fanda Vacek <fanda.vacek@gmail.com>"]
 edition = "2018"
