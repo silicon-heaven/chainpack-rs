@@ -1,4 +1,4 @@
-use crate::{RpcValue, MetaMap, metamap::MetaKey, Decimal, DateTime, WriteResult, Value, ReadResult};
+use crate::{RpcValue, MetaMap, metamap::MetaKey, Decimal, DateTime, WriteResult, Value};
 use std::io;
 use crate::writer::{ByteWriter, Writer};
 use std::io::{Write, Read};
@@ -26,6 +26,8 @@ pub(crate) enum PackingSchema {
     TRUE = 254,
     TERM = 255,
 }
+
+const SHV_EPOCH_MSEC: i64 = 1517529600000;
 
 pub struct ChainPackWriter<'a, W>
     where W: Write
@@ -167,10 +169,10 @@ impl<'a, W> ChainPackWriter<'a, W>
             self.write_byte(PackingSchema::Int as u8)?;
             self.write_int_data(n)?;
         }
-        Ok(cnt)
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_uint(&mut self, n: u64) -> WriteResult {
-        let mut cnt = 0;
+        let cnt = 0;
         if n < 64 {
             self.write_byte((n % 64) as u8)?;
         }
@@ -178,86 +180,42 @@ impl<'a, W> ChainPackWriter<'a, W>
             self.write_byte(PackingSchema::UInt as u8)?;
             self.write_uint_data(n)?;
         }
-        Ok(cnt)
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_double(&mut self, n: f64) -> WriteResult {
-        let s = n.to_string();
-        let cnt = self.write_bytes(s.as_bytes())?;
-        Ok(cnt)
+        let cnt = self.write_byte(PackingSchema::Double as u8)?;
+        let bytes = n.to_le_bytes();
+        self.write_bytes(&bytes);
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_decimal(&mut self, decimal: &Decimal) -> WriteResult {
-        let mut neg = false;
-        let (mut mantisa, exponent) = decimal.decode();
-        if mantisa < 0 {
-            mantisa = -mantisa;
-            neg = true;
-        }
-        //let buff: Vec<u8> = Vec::new();
-        let mut s = mantisa.to_string();
-
-        let n = s.len() as i8;
-        let dec_places = -exponent as i8;
-        if dec_places > 0 && dec_places < n {
-            // insert decimal point
-            let dot_ix = n - dec_places;
-            s.insert(dot_ix as usize, '.');
-        }
-        else if dec_places > 0 && dec_places <= 3 {
-            // prepend 0.00000..
-            let extra_0_cnt = dec_places - n;
-            s = "0.".to_string()
-                + &*std::iter::repeat("0").take(extra_0_cnt as usize).collect::<String>()
-                + &*s;
-        }
-        else if dec_places < 0 && n + exponent <= 9 {
-            // append ..000000.
-            s = s + &*std::iter::repeat("0").take(exponent as usize).collect::<String>();
-            s.push('.');
-        }
-        else if dec_places == 0 {
-            // just append decimal point
-            s.push('.');
-        }
-        else {
-            // exponential notation
-            s.push('e');
-            s += &*exponent.to_string();
-        }
-        if neg {
-            s.insert(0, '-');
-        }
-        let cnt = self.write_bytes(s.as_bytes())?;
-        return Ok(cnt)
+        let cnt = self.write_byte(PackingSchema::Decimal as u8)?;
+        let (mantisa, exponent) = decimal.decode();
+        self.write_int_data(mantisa)?;
+        self.write_int_data(exponent as i64)?;
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_datetime(&mut self, dt: &DateTime) -> WriteResult {
-        let mut cnt = self.write_bytes("d\"".as_bytes())?;
-        let dtf = dt.to_datetime();
-        let mut s = format!("{}", dtf.format("%Y-%m-%dT%H:%M:%S"));
-        let ms = dt.to_epoch_msec() % 1000;
-        if ms > 0 {
-            s.push_str(&format!(".{:03}", ms));
+        let cnt = self.write_byte(PackingSchema::DateTime as u8)?;
+        let mut msecs = dt.to_epoch_msec() - SHV_EPOCH_MSEC;
+        let offset = (dt.utc_offset() / 15) & 0x7F;
+        let ms = msecs % 1000;
+        if ms == 0 {
+            msecs /= 1000;
         }
-        let mut offset = dt.utc_offset();
-        if offset == 0 {
-            s.push('Z');
+        if offset != 0 {
+            msecs <<= 7;
+            msecs |= offset as i64;
         }
-        else {
-            if offset < 0 {
-                s.push('-');
-                offset = -offset;
-            } else {
-                s.push('+');
-            }
-            let offset_hr = offset / 60 / 60;
-            let offset_min = offset / 60 % 60;
-            s += &format!("{:02}", offset_hr);
-            if offset_min > 0 {
-                s += &format!("{:02}", offset_min);
-            }
+        msecs <<= 2;
+        if offset != 0 {
+            msecs |= 1;
         }
-        self.write_bytes(s.as_bytes())?;
-        self.write_byte(b'"')?;
-        return Ok(cnt)
+        if ms == 0 {
+            msecs |= 2;
+        }
+        self.write_int_data(msecs)?;
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_list(&mut self, lst: &Vec<RpcValue>) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::List as u8)?;
@@ -375,9 +333,45 @@ impl<'a, R> ChainPackReader<'a, R>
         self.byte_reader.make_error(msg)
     }
 
-    fn read_string(&mut self) -> Result<Value, ReadError> {
+    /// return (n, bitlen)
+    /// bitlen is used to enable same function usage for signed int unpacking
+    fn read_uint_data_helper(&mut self) -> Result<(u64, u8), ReadError> {
+        let mut num = 0;
+        let head = self.get_byte()?;
+        let bytes_to_read_cnt;
+        let bitlen;
+        if (head & 128) == 0 {bytes_to_read_cnt = 0; num = (head & 127) as u64; bitlen = 7;}
+        else if (head &  64) == 0 {bytes_to_read_cnt = 1; num = (head & 63) as u64; bitlen = 6 + 8;}
+        else if (head &  32) == 0 {bytes_to_read_cnt = 2; num = (head & 31) as u64; bitlen = 5 + 2*8;}
+        else if (head &  16) == 0 {bytes_to_read_cnt = 3; num = (head & 15) as u64; bitlen = 4 + 3*8;}
+        else {
+            bytes_to_read_cnt = (head & 0xf) + 4;
+            bitlen = bytes_to_read_cnt * 8;
+        }
+        for _ in 0 .. bytes_to_read_cnt {
+            let r = self.get_byte()?;
+            num = (num << 8) + (r as u64);
+        }
+        Ok((num, bitlen))
+    }
+    fn read_uint_data(&mut self) -> Result<u64, ReadError> {
+        let (num, _) = self.read_uint_data_helper()?;
+        return Ok(num);
+    }
+    fn read_int_data(&mut self) -> Result<i64, ReadError> {
+        let (num, bitlen) = self.read_uint_data_helper()?;
+        let sign_bit_mask = (1 as u64) << (bitlen - 1);
+        let neg = (num & sign_bit_mask) != 0;
+        let mut snum = num as i64;
+        if neg {
+            snum &= !(sign_bit_mask as i64);
+            snum = -snum;
+        }
+        return Ok(snum);
+    }
+
+    fn read_cstring_data(&mut self) -> Result<Value, ReadError> {
         let mut buff: Vec<u8> = Vec::new();
-        self.get_byte()?; // eat "
         loop {
             let b = self.get_byte()?;
             match &b {
@@ -385,15 +379,11 @@ impl<'a, R> ChainPackReader<'a, R>
                     let b = self.get_byte()?;
                     match &b {
                         b'\\' => buff.push(b'\\'),
-                        b'"' => buff.push(b'"'),
-                        b'n' => buff.push(b'\n'),
-                        b'r' => buff.push(b'\r'),
-                        b't' => buff.push(b'\t'),
                         b'0' => buff.push(b'\0'),
                         _ => buff.push(b),
                     }
                 }
-                b'"' => {
+                0 => {
                     // end of string
                     break;
                 }
@@ -404,273 +394,129 @@ impl<'a, R> ChainPackReader<'a, R>
         }
         let s = std::str::from_utf8(&buff);
         match s {
-            Ok(s) => return Ok(s.make_value()),
-            Err(e) => return Err(self.make_error(&format!("Invalid Map key, Utf8 error: {}", e))),
+            Ok(s) => return Ok(s.chainpack_make_value()),
+            Err(e) => return Err(self.make_error(&format!("Invalid string, Utf8 error: {}", e))),
         }
     }
-    fn read_int(&mut self) -> Result<(i64, i32), ReadError>
-    {
-        let mut base = 10;
-        let mut val: i64 = 0;
-        let mut neg = false;
-        let mut n = 0;
-        let mut digit_cnt = 0;
-        loop {
-            let b = self.peek_byte();
-            match b {
-                0 => break,
-                b'+' | b'-' => {
-                    if n != 0 {
-                        break;
-                    }
-                    let b = self.get_byte()?;
-                    if b == b'-' {
-                        neg = true;
-                    }
-                }
-                b'x' => {
-                    if n == 1 && val != 0 {
-                        break;
-                    }
-                    if n != 1 {
-                        break;
-                    }
-                    self.get_byte()?;
-                    base = 16;
-                }
-                b'0' ..= b'9' => {
-                    self.get_byte()?;
-                    val *= base;
-                    val += (b as i64) - 48;
-                    digit_cnt += 1;
-                }
-                b'A' ..= b'F' => {
-                    if base != 16 {
-                        break;
-                    }
-                    self.get_byte()?;
-                    val *= base;
-                    val += (b as i64) - 65 + 10;
-                    digit_cnt += 1;
-                }
-                b'a' ..= b'f' => {
-                    if base != 16 {
-                        break;
-                    }
-                    self.get_byte()?;
-                    val *= base;
-                    val += (b as i64) - 97 + 10;
-                    digit_cnt += 1;
-                }
-                _ => break,
-            }
-            n += 1;
+    fn read_string_data(&mut self) -> Result<Value, ReadError> {
+        let len = self.read_uint_data()?;
+        let mut buff: Vec<u8> = Vec::new();
+        for _ in 0 .. len {
+            let b = self.get_byte()?;
+            buff.push(b);
         }
-        if neg {
-            val = -val;
+        let s = std::str::from_utf8(&buff);
+        match s {
+            Ok(s) => return Ok(Value::new(s)),
+            Err(e) => return Err(self.make_error(&format!("Invalid string, Utf8 error: {}", e))),
         }
-        Ok((val, digit_cnt))
     }
-    fn read_number(&mut self) -> Result<Value, ReadError>
-    {
-        let mut mantisa = 0;
-        let mut exponent = 0;
-        let mut decimals = 0;
-        let mut dec_cnt = 0;
-        let mut is_decimal = false;
-        let mut is_uint = false;
-        let mut is_neg = false;
-
-        let b = self.peek_byte();
-        if b == b'+' {
-            is_neg = false;
-            self.get_byte()?;
+    fn read_blob_data(&mut self) -> Result<Value, ReadError> {
+        let len = self.read_uint_data()?;
+        let mut buff: Vec<u8> = Vec::new();
+        for _ in 0 .. len {
+            let b = self.get_byte()?;
+            buff.push(b);
         }
-        else if b == b'-' {
-            is_neg = true;
-            self.get_byte()?;
-        }
-
-        let (n, digit_cnt) = self.read_int()?;
-        if digit_cnt == 0 {
-            return Err(self.make_error("Number should contain at least one digit."))
-        }
-        mantisa = n;
-        #[derive(PartialEq)]
-        enum State { Mantisa, Decimals, Exponent };
-        let mut state = State::Mantisa;
-        loop {
-            let b = self.peek_byte();
-            match b {
-                b'u' => {
-                    is_uint = true;
-                    self.get_byte()?;
-                    break;
-                }
-                b'.' => {
-                    if state != State::Mantisa {
-                        return Err(self.make_error("Unexpected decimal point."))
-                    }
-                    state = State::Decimals;
-                    is_decimal = true;
-                    self.get_byte()?;
-                    let (n, digit_cnt) = self.read_int()?;
-                    decimals = n;
-                    dec_cnt = digit_cnt as i64;
-                }
-                b'e' | b'E' => {
-                    if state != State::Mantisa && state != State::Decimals {
-                        return Err(self.make_error("Unexpected exponet mark."))
-                    }
-                    //state = State::Exponent;
-                    is_decimal = true;
-                    self.get_byte()?;
-                    let (n, digit_cnt) = self.read_int()?;
-                    exponent = n;
-                    if digit_cnt == 0 {
-                        return Err(self.make_error("Malformed number exponetional part."))
-                    }
-                    break;
-                }
-                _ => { break; }
-            }
-        }
-        if is_decimal {
-            for _i in 0 .. dec_cnt {
-                mantisa *= 10;
-            }
-            mantisa += decimals;
-            if is_neg {
-                mantisa = -mantisa
-            }
-            return Ok(Decimal::new(mantisa, (exponent - dec_cnt) as i8).make_value())
-        }
-        if is_uint {
-            return Ok((mantisa as u64).make_value())
-        }
-        if is_neg { mantisa = -mantisa }
-        return Ok(mantisa.make_value())
+        return Ok(Value::new(buff))
     }
-    fn read_list(&mut self) -> Result<Value, ReadError>
-    {
+    fn read_list_data(&mut self) -> Result<Value, ReadError> {
         let mut lst = Vec::new();
-        self.get_byte()?; // eat '['
         loop {
-            let b = self.peek_byte();
-            if b == b']' {
-                self.get_byte()?;
+            let b = self.get_byte()?;
+            if b == PackingSchema::TERM as u8 {
                 break;
             }
             let val = self.read()?;
             lst.push(val);
         }
-        return Ok(lst.make_value())
+        return Ok(Value::new(lst))
     }
-
-    fn read_map(&mut self) -> Result<Value, ReadError> {
+    fn read_map_data(&mut self) -> Result<Value, ReadError> {
         let mut map: HashMap<String, RpcValue> = HashMap::new();
-        self.get_byte()?; // eat '{'
         loop {
-            let b = self.peek_byte();
-            if b == b'}' {
-                self.get_byte()?;
+            let b = self.get_byte()?;
+            if b == PackingSchema::TERM as u8 {
                 break;
             }
-            let key = self.read_string();
-            let skey = match &key {
-                Ok(b) => {
-                    match b {
-                        Value::String(s) => s,
-                        _ => return Err(self.make_error("Read MetaMap key internal error")),
-                    }
-                },
-                _ => return Err(self.make_error(&format!("Invalid Map key '{}'", b))),
-            };
+            let k = self.read()?;
+            let key;
+            if k.is_string() {
+                key = k.to_str();
+            }
+            else {
+                return Err(self.make_error(&format!("Invalid Map key '{}'", k)))
+            }
             let val = self.read()?;
-            map.insert(*skey.clone(), val);
+            map.insert(key.to_string(), val);
         }
-        return Ok(map.make_value())
+        return Ok(Value::new(map))
     }
-    fn read_imap(&mut self) -> Result<Value, ReadError> {
-        self.get_byte()?; // eat 'i'
-        let b = self.get_byte()?; // eat '{'
-        if b != b'{' {
-            return Err(self.make_error("Wrong IMap prefix, '{' expected."))
-        }
+    fn read_imap_data(&mut self) -> Result<Value, ReadError> {
         let mut map: HashMap<i32, RpcValue> = HashMap::new();
         loop {
-            let b = self.peek_byte();
-            if b == b'}' {
-                self.get_byte()?;
+            let b = self.get_byte()?;
+            if b == PackingSchema::TERM as u8 {
                 break;
             }
-            let key = self.read_int()?.0;
-            let val = self.read()?;
-            map.insert(key as i32, val);
-        }
-        return Ok(map.make_value())
-    }
-    fn read_datetime(&mut self) -> Result<Value, ReadError> {
-        unimplemented!()
-    }
-    fn read_true(&mut self) -> Result<Value, ReadError> {
-        self.read_token("true")?;
-        return Ok(true.make_value())
-    }
-    fn read_false(&mut self) -> Result<Value, ReadError> {
-        self.read_token("false")?;
-        return Ok(false.make_value())
-    }
-    fn read_null(&mut self) -> Result<Value, ReadError> {
-        self.read_token("null")?;
-        return Ok(().make_value())
-    }
-    fn read_token(&mut self, token: &str) -> Result<(), ReadError> {
-        for c in token.as_bytes() {
-            let b = self.get_byte()?;
-            if b != *c {
-                return Err(self.make_error(&format!("Incomplete '{}' literal.", token)))
+            let k = self.read()?;
+            let key;
+            if k.is_int() {
+                key = k.to_i32();
             }
+            else {
+                return Err(self.make_error(&format!("Invalid IMap key '{}'", k)))
+            }
+            let val = self.read()?;
+            map.insert(key, val);
         }
-        return Ok(())
+        return Ok(Value::new(map))
     }
-
+    fn read_datetime_data(&mut self) -> Result<Value, ReadError> {
+        let mut d = self.read_int_data()?;
+        let mut offset = 0;
+        let has_tz_offset = (d & 1) != 0;
+        let has_not_msec = (d & 2) != 0;
+        d >>= 2;
+        if has_tz_offset {
+            offset = (d & 0x7F) as i8;
+            offset <<= 1;
+            offset >>= 1; // sign extension
+            d >>= 7;
+        }
+        if has_not_msec {
+            d *= 1000;
+        }
+        d += SHV_EPOCH_MSEC;
+        let dt = DateTime::from_epoch_msec_tz(d, (offset * 15) as i32 * 60);
+        return Ok(Value::new(dt))
+    }
+    fn read_double_data(&mut self) -> Result<Value, ReadError> {
+        let mut buff: [u8;8] = [0;8];
+        self.byte_reader.read.read(&mut buff);
+        let d = f64::from_le_bytes(buff);
+        return Ok(Value::new(d))
+    }
+    fn read_decimal_data(&mut self) -> Result<Value, ReadError> {
+        let mantisa = self.read_int_data()?;
+        let exponent = self.read_int_data()?;
+        let d = Decimal::new(mantisa, exponent as i8);
+        return Ok(Value::new(d))
+    }
 }
 
 impl<'a, R> Reader for ChainPackReader<'a, R>
     where R: Read
 {
-    fn read(&mut self) -> ReadResult {
-        let mut b = self.peek_byte();
-        let mut mm: Option<MetaMap> = None;
-        if b == b'<' {
-            mm = Some(self.read_meta()?);
-            b = self.peek_byte();
+    fn try_read_meta(&mut self) -> Result<Option<MetaMap>, ReadError> {
+        let b = self.peek_byte();
+        if b != PackingSchema::MetaMap as u8 {
+            return Ok(None)
         }
-        let v = match &b {
-            b'0' ..= b'9' | b'+' | b'-' => self.read_number(),
-            b'"' => self.read_string(),
-            b'[' => self.read_list(),
-            b'{' => self.read_map(),
-            b'i' => self.read_imap(),
-            b'd' => self.read_datetime(),
-            b't' => self.read_true(),
-            b'f' => self.read_false(),
-            b'n' => self.read_null(),
-            _ => Err(self.make_error(&format!("Invalid char {}", b))),
-        }?;
-        let mut rv = RpcValue::new(v);
-        if let Some(m) = mm {
-            rv.set_meta(m);
-        }
-        return Ok(rv)
-    }
-    fn read_meta(&mut self) -> Result<MetaMap, ReadError> {
-        self.get_byte()?; // eat '<'
         let mut map = MetaMap::new();
         loop {
             let b = self.peek_byte();
-            if b == b'>' {
+            if b == PackingSchema::TERM as u8 {
                 self.get_byte()?;
                 break;
             }
@@ -683,22 +529,63 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
                 map.insert(key.to_str(), val);
             }
         }
-        Ok(map)
+        Ok(Some(map))
     }
     fn read_value(&mut self) -> Result<Value, ReadError> {
-        let b = self.peek_byte();
-        let v = match &b {
-            b'0' ..= b'9' | b'+' | b'-' => self.read_number(),
-            b'"' => self.read_string(),
-            b'[' => self.read_list(),
-            b'{' => self.read_map(),
-            b'i' => self.read_imap(),
-            b'd' => self.read_datetime(),
-            b't' => self.read_true(),
-            b'f' => self.read_false(),
-            b'n' => self.read_null(),
-            _ => Err(self.make_error(&format!("Invalid char {}", b))),
-        }?;
+        let b = self.get_byte()?;
+        let v =
+            if b < 128 {
+                if (b & 64) == 0 {
+                    // tiny UInt
+                    Value::new((b & 63) as u64)
+                }
+                else {
+                    // tiny Int
+                    Value::new((b & 63) as i64)
+                }
+            } else if b == PackingSchema::Int as u8 {
+                let n = self.read_int_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::UInt as u8 {
+                let n = self.read_uint_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::Double as u8 {
+                let n = self.read_double_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::Decimal as u8 {
+                let n = self.read_decimal_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::DateTime as u8 {
+                let n = self.read_datetime_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::String as u8 {
+                let n = self.read_string_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::CString as u8 {
+                let n = self.read_cstring_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::Blob as u8 {
+                let n = self.read_blob_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::List as u8 {
+                let n = self.read_list_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::Map as u8 {
+                let n = self.read_map_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::IMap as u8 {
+                let n = self.read_imap_data()?;
+                Value::new(n)
+            } else if b == PackingSchema::TRUE as u8 {
+                Value::new(true)
+            } else if b == PackingSchema::FALSE as u8 {
+                Value::new(false)
+            } else if b == PackingSchema::Null as u8 {
+                Value::new(())
+            } else {
+                return Err(self.make_error(&format!("Invalid char {}", b)))
+            };
+
         Ok(v)
     }
 }

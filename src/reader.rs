@@ -14,9 +14,9 @@ impl ReadError {
     }
 }
 
-pub struct ByteReader<'a, R>
+pub(crate) struct ByteReader<'a, R>
 {
-    read: &'a mut R,
+    pub read: &'a mut R,
     peeked: Option<u8> ,
     line: usize,
     col: usize,
@@ -87,7 +87,12 @@ pub type ReadResult = Result<RpcValue, ReadError>;
 //pub type ReadValueResult = Result<Value, ReadError>;
 
 pub trait Reader {
-    fn read(&mut self) -> ReadResult;
-    fn read_meta(&mut self) -> Result<MetaMap, ReadError>;
+    fn read(&mut self) -> ReadResult {
+        let m = self.try_read_meta()?;
+        let v = self.read_value()?;
+        let rv = RpcValue::new_with_meta(v, m);
+        return Ok(rv)
+    }
+    fn try_read_meta(&mut self) -> Result<Option<MetaMap>, ReadError>;
     fn read_value(&mut self) -> Result<Value, ReadError>;
 }

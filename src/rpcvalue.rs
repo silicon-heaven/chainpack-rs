@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use log;
 
 use lazy_static::lazy_static;
 
@@ -50,6 +51,9 @@ pub enum Value {
 }
 
 impl Value {
+	pub(crate) fn new(v: impl FromValue) -> Value {
+		v.chainpack_make_value()
+	}
 	pub fn type_name(&self) -> &'static str {
 		match &self {
 			Value::Null => "Null",
@@ -69,22 +73,24 @@ impl Value {
 }
 
 pub trait FromValue {
-	fn make_value(self) -> Value;
+	fn chainpack_make_value(self) -> Value;
 }
 
-impl FromValue for Value { fn make_value(self) -> Value { self } }
-impl FromValue for () { fn make_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn make_value(self) -> Value { Value::String(Box::new(self.to_string())) } }
-impl FromValue for &String { fn make_value(self) -> Value { Value::String(Box::new(self.clone())) } }
-impl FromValue for i32 { fn make_value(self) -> Value { Value::Int(self as i64) } }
-impl FromValue for usize { fn make_value(self) -> Value { Value::UInt(self as u64) } }
+impl FromValue for Value { fn chainpack_make_value(self) -> Value { self } }
+impl FromValue for () { fn chainpack_make_value(self) -> Value { Value::Null } }
+impl FromValue for &str { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.to_string())) } }
+impl FromValue for Vec<u8> { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self)) } }
+impl FromValue for &[u8] { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self.to_vec())) } }
+impl FromValue for &String { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.clone())) } }
+impl FromValue for i32 { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
+impl FromValue for usize { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
-	fn make_value(self) -> Value {
+	fn chainpack_make_value(self) -> Value {
 		Value::DateTime(DateTime::from_epoch_msec(self.timestamp_millis()))
 	}
 }
 impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
-	fn make_value(self) -> Value {
+	fn chainpack_make_value(self) -> Value {
 		Value::DateTime(DateTime::from_datetime(&self))
 	}
 }
@@ -92,7 +98,7 @@ impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
 macro_rules! from_value {
     ($from:ty, $to:ident) => {
 		impl FromValue for $from {
-			fn make_value(self) -> Value {
+			fn chainpack_make_value(self) -> Value {
 				Value::$to(self)
 			}
 		}
@@ -109,7 +115,7 @@ from_value!(Decimal, Decimal);
 macro_rules! from_value_box {
     ($from:ty, $to:ident) => {
 		impl FromValue for $from {
-			fn make_value(self) -> Value {
+			fn chainpack_make_value(self) -> Value {
 				Value::$to(Box::new(self))
 			}
 		}
@@ -129,10 +135,23 @@ pub struct RpcValue {
 
 impl RpcValue {
 	pub fn new<I>(val: I) -> RpcValue
-	where I: FromValue {
+		where I: FromValue
+	{
 		RpcValue {
 			meta: None,
-			value: val.make_value(),
+			value: val.chainpack_make_value(),
+		}
+	}
+	pub fn new_with_meta<I>(val: I, meta: Option<MetaMap>) -> RpcValue
+		where I: FromValue
+	{
+		let mm = match meta {
+			None => None,
+			Some(m) => Some(Box::new(m)),
+		};
+		RpcValue {
+			meta: mm,
+			value: val.chainpack_make_value(),
 		}
 	}
 
@@ -171,6 +190,12 @@ impl RpcValue {
 	pub fn is_int(&self) -> bool {
 		match &self.value {
 			Value::Int(_) => true,
+			_ => false,
+		}
+	}
+	pub fn is_string(&self) -> bool {
+		match &self.value {
+			Value::String(_) => true,
 			_ => false,
 		}
 	}
@@ -240,7 +265,11 @@ impl RpcValue {
 	pub fn to_cpon(&self) -> String {
 		let mut buff: Vec<u8> = Vec::new();
 		let mut wr = CponWriter::new(&mut buff);
-		wr.write(self);
+		let res = wr.write(self);
+		if let Err(e) = res {
+			log::warn!("to_cpon write with error: {}", e);
+			return String::new()
+		}
 		match String::from_utf8(buff) {
 			Ok(s) => s,
 			Err(e) => String::new(),

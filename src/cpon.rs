@@ -1,5 +1,5 @@
 use std::io::{Write, Read};
-use crate::{RpcValue, MetaMap, Value, Decimal, DateTime, ReadResult};
+use crate::{RpcValue, MetaMap, Value, Decimal, DateTime};
 use std::collections::HashMap;
 use crate::writer::{WriteResult, Writer, ByteWriter};
 use crate::metamap::MetaKey;
@@ -399,7 +399,7 @@ impl<'a, R> CponReader<'a, R>
         }
         let s = std::str::from_utf8(&buff);
         match s {
-            Ok(s) => return Ok(s.make_value()),
+            Ok(s) => return Ok(s.chainpack_make_value()),
             Err(e) => return Err(self.make_error(&format!("Invalid Map key, Utf8 error: {}", e))),
         }
     }
@@ -538,13 +538,13 @@ impl<'a, R> CponReader<'a, R>
             if is_neg {
                 mantisa = -mantisa
             }
-            return Ok(Decimal::new(mantisa, (exponent - dec_cnt) as i8).make_value())
+            return Ok(Value::new(Decimal::new(mantisa, (exponent - dec_cnt) as i8)))
         }
         if is_uint {
-            return Ok((mantisa as u64).make_value())
+            return Ok(Value::new(mantisa as u64))
         }
         if is_neg { mantisa = -mantisa }
-        return Ok(mantisa.make_value())
+        return Ok(Value::new(mantisa))
     }
     fn read_list(&mut self) -> Result<Value, ReadError>
     {
@@ -560,7 +560,7 @@ impl<'a, R> CponReader<'a, R>
             let val = self.read()?;
             lst.push(val);
         }
-        return Ok(lst.make_value())
+        return Ok(Value::new(lst))
     }
 
     fn read_map(&mut self) -> Result<Value, ReadError> {
@@ -587,7 +587,7 @@ impl<'a, R> CponReader<'a, R>
             let val = self.read()?;
             map.insert(*skey.clone(), val);
         }
-        return Ok(map.make_value())
+        return Ok(Value::new(map))
     }
     fn read_imap(&mut self) -> Result<Value, ReadError> {
         self.get_byte()?; // eat 'i'
@@ -608,7 +608,7 @@ impl<'a, R> CponReader<'a, R>
             let val = self.read()?;
             map.insert(key as i32, val);
         }
-        return Ok(map.make_value())
+        return Ok(Value::new(map))
     }
     fn read_datetime(&mut self) -> Result<Value, ReadError> {
         self.get_byte()?; // eat 'd'
@@ -646,7 +646,7 @@ impl<'a, R> CponReader<'a, R>
                         }
                     }
                     let dt = DateTime::from_epoch_msec_tz(ndt.timestamp(), offset);
-                    return Ok(dt.make_value())
+                    return Ok(Value::new(dt))
                 }
             }
             return Err(self.make_error(&format!("Invalid DateTime: '{}", s)))
@@ -655,15 +655,15 @@ impl<'a, R> CponReader<'a, R>
     }
     fn read_true(&mut self) -> Result<Value, ReadError> {
         self.read_token("true")?;
-        return Ok(true.make_value())
+        return Ok(Value::new(true))
     }
     fn read_false(&mut self) -> Result<Value, ReadError> {
         self.read_token("false")?;
-        return Ok(false.make_value())
+        return Ok(Value::new(false))
     }
     fn read_null(&mut self) -> Result<Value, ReadError> {
         self.read_token("null")?;
-        return Ok(().make_value())
+        return Ok(Value::new(()))
     }
     fn read_token(&mut self, token: &str) -> Result<(), ReadError> {
         for c in token.as_bytes() {
@@ -680,35 +680,12 @@ impl<'a, R> CponReader<'a, R>
 impl<'a, R> Reader for CponReader<'a, R>
     where R: Read
 {
-    fn read(&mut self) -> ReadResult {
-        self.skip_white_insignificant()?;
-        let mut b = self.peek_byte();
-        let mut mm: Option<MetaMap> = None;
-        if b == b'<' {
-            mm = Some(self.read_meta()?);
-            self.skip_white_insignificant()?;
-            b = self.peek_byte();
+    fn try_read_meta(&mut self) -> Result<Option<MetaMap>, ReadError> {
+        let b = self.peek_byte();
+        if b != b'<' {
+            return Ok(None)
         }
-        let v = match &b {
-            b'0' ..= b'9' | b'+' | b'-' => self.read_number(),
-            b'"' => self.read_string(),
-            b'[' => self.read_list(),
-            b'{' => self.read_map(),
-            b'i' => self.read_imap(),
-            b'd' => self.read_datetime(),
-            b't' => self.read_true(),
-            b'f' => self.read_false(),
-            b'n' => self.read_null(),
-            _ => Err(self.make_error(&format!("Invalid char {}", b))),
-        }?;
-        let mut rv = RpcValue::new(v);
-        if let Some(m) = mm {
-            rv.set_meta(m);
-        }
-        return Ok(rv)
-    }
-    fn read_meta(&mut self) -> Result<MetaMap, ReadError> {
-        self.get_byte()?; // eat '<'
+        self.get_byte()?;
         let mut map = MetaMap::new();
         loop {
             self.skip_white_insignificant()?;
@@ -727,7 +704,7 @@ impl<'a, R> Reader for CponReader<'a, R>
                 map.insert(key.to_str(), val);
             }
         }
-        Ok(map)
+        Ok(Some(map))
     }
     fn read_value(&mut self) -> Result<Value, ReadError> {
         self.skip_white_insignificant()?;
@@ -801,7 +778,7 @@ mod test
         let cpon = r#"<1: 123,2:"baz">"#;
         let mut b = cpon.as_bytes();
         let mut rd = CponReader::new(&mut b);
-        let mm1 = rd.read_meta().unwrap();
+        let mm1 = rd.try_read_meta().unwrap().unwrap();
         let mut mm2 = MetaMap::new();
         mm2.insert(1, RpcValue::new(123));
         mm2.insert(2, RpcValue::new("baz"));
