@@ -22,6 +22,9 @@ impl<'a, W> CponWriter<'a, W>
             indent: "".to_string()
         }
     }
+    pub fn set_indent(&mut self, indent: &str) {
+        self.indent = indent.to_string();
+    }
 
     fn write_byte(&mut self, b: u8) -> WriteResult {
         self.byte_writer.write_byte(b)
