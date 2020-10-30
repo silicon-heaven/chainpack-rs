@@ -136,14 +136,14 @@ impl Index<i32> for MetaMap {
 mod test {
     use crate::metamap::MetaMap;
     use crate::rpcvalue::RpcValue;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     #[test]
     fn metamap_insert() {
         let mut mm = MetaMap::new();
 
         mm.insert(123, RpcValue::new(1.1));
-        assert_eq!(mm[123].to_double(), 1.1);
+        assert_eq!(mm[123].to_f64(), 1.1);
         // let vv = mm.value(1234, Some(&RpcValue::new(123)));
         // println!("inserted and retrieved: {:?}", vv);
         // assert_eq!(123, vv.unwrap().to_i32().unwrap());
@@ -158,7 +158,7 @@ mod test {
         mm.insert("list", RpcValue::new(v1));
         assert_eq!(mm["list"].to_list(), &v2);
 
-        let mut v1: HashMap<i32, RpcValue> = HashMap::new();
+        let mut v1: BTreeMap<i32, RpcValue> = BTreeMap::new();
         v1.insert(1, RpcValue::new("foo"));
         v1.insert(2, RpcValue::new("bar"));
         v1.insert(3, RpcValue::new("baz"));
@@ -166,7 +166,7 @@ mod test {
         mm.insert("imap", RpcValue::new(v1));
         assert_eq!(mm["imap"].to_imap(), &v2);
 
-        let mut v1: HashMap<String, RpcValue> = HashMap::new();
+        let mut v1: BTreeMap<String, RpcValue> = BTreeMap::new();
         v1.insert("a".to_string(), RpcValue::new("foo"));
         v1.insert("b".to_string(), RpcValue::new("bar"));
         v1.insert("c".to_string(), RpcValue::new("baz"));

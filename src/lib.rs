@@ -19,12 +19,6 @@ pub use cpon::{CponReader};
 pub use cpon::{CponWriter};
 pub use chainpack::{ChainPackReader, ChainPackWriter};
 
-/*
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}
-*/
+mod tests;
+

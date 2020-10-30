@@ -1,6 +1,6 @@
 use std::io::{Write, Read};
 use crate::{RpcValue, MetaMap, Value, Decimal, DateTime};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::writer::{WriteResult, Writer, ByteWriter};
 use crate::metamap::MetaKey;
 use crate::reader::{Reader, ByteReader, ReadError};
@@ -30,26 +30,22 @@ impl<'a, W> CponWriter<'a, W>
         self.byte_writer.write_bytes(b)
     }
 
-    fn write_int(&mut self, n: i64) -> WriteResult
-    {
+    fn write_int(&mut self, n: i64) -> WriteResult {
         let s = n.to_string();
         let cnt = self.write_bytes(s.as_bytes())?;
         Ok(cnt)
     }
-    fn write_uint(&mut self, n: u64) -> WriteResult
-    {
+    fn write_uint(&mut self, n: u64) -> WriteResult {
         let s = n.to_string();
         let cnt = self.write_bytes(s.as_bytes())?;
         Ok(cnt)
     }
-    fn write_double(&mut self, n: f64) -> WriteResult
-    {
-        let s = n.to_string();
+    fn write_double(&mut self, n: f64) -> WriteResult {
+        let s = format!("{:e}", n);
         let cnt = self.write_bytes(s.as_bytes())?;
         Ok(cnt)
     }
-    fn write_string(&mut self, s: &str) -> WriteResult
-    {
+    fn write_string(&mut self, s: &str) -> WriteResult {
         let mut cnt: usize = 0;
         cnt += self.write_byte(b'"')?;
         let bytes = s.as_bytes();
@@ -88,81 +84,18 @@ impl<'a, W> CponWriter<'a, W>
         Ok(cnt)
     }
     fn write_decimal(&mut self, decimal: &Decimal) -> WriteResult {
-        let mut neg = false;
-        let (mut mantisa, exponent) = decimal.decode();
-        if mantisa < 0 {
-            mantisa = -mantisa;
-            neg = true;
-        }
-        //let buff: Vec<u8> = Vec::new();
-        let mut s = mantisa.to_string();
-
-        let n = s.len() as i8;
-        let dec_places = -exponent as i8;
-        if dec_places > 0 && dec_places < n {
-            // insert decimal point
-            let dot_ix = n - dec_places;
-            s.insert(dot_ix as usize, '.');
-        }
-        else if dec_places > 0 && dec_places <= 3 {
-            // prepend 0.00000..
-            let extra_0_cnt = dec_places - n;
-            s = "0.".to_string()
-                + &*std::iter::repeat("0").take(extra_0_cnt as usize).collect::<String>()
-                + &*s;
-        }
-        else if dec_places < 0 && n + exponent <= 9 {
-            // append ..000000.
-            s = s + &*std::iter::repeat("0").take(exponent as usize).collect::<String>();
-            s.push('.');
-        }
-        else if dec_places == 0 {
-            // just append decimal point
-            s.push('.');
-        }
-        else {
-            // exponential notation
-            s.push('e');
-            s += &*exponent.to_string();
-        }
-        if neg {
-            s.insert(0, '-');
-        }
+        let s = decimal.to_cpon_string();
         let cnt = self.write_bytes(s.as_bytes())?;
         return Ok(cnt)
     }
     fn write_datetime(&mut self, dt: &DateTime) -> WriteResult {
         let mut cnt = self.write_bytes("d\"".as_bytes())?;
-        let dtf = dt.to_datetime();
-        let mut s = format!("{}", dtf.format("%Y-%m-%dT%H:%M:%S"));
-        let ms = dt.to_epoch_msec() % 1000;
-        if ms > 0 {
-            s.push_str(&format!(".{:03}", ms));
-        }
-        let mut offset = dt.utc_offset();
-        if offset == 0 {
-            s.push('Z');
-        }
-        else {
-            if offset < 0 {
-                s.push('-');
-                offset = -offset;
-            } else {
-                s.push('+');
-            }
-            let offset_hr = offset / 60 / 60;
-            let offset_min = offset / 60 % 60;
-            s += &format!("{:02}", offset_hr);
-            if offset_min > 0 {
-                s += &format!("{:02}", offset_min);
-            }
-        }
+        let s = dt.to_cpon_string();
         cnt += self.write_bytes(s.as_bytes())?;
         cnt += self.write_byte(b'"')?;
         return Ok(cnt)
     }
-    fn write_list(&mut self, lst: &Vec<RpcValue>) -> WriteResult
-    {
+    fn write_list(&mut self, lst: &Vec<RpcValue>) -> WriteResult {
         let mut cnt = 0;
         cnt += self.write_byte(b'[')?;
         let mut n = 0;
@@ -178,8 +111,7 @@ impl<'a, W> CponWriter<'a, W>
         cnt += self.write_byte(b']')?;
         Ok(cnt)
     }
-    fn write_map(&mut self, map: &HashMap<String, RpcValue>) -> WriteResult
-    {
+    fn write_map(&mut self, map: &BTreeMap<String, RpcValue>) -> WriteResult {
         let mut cnt = 0;
         cnt += self.write_byte(b'{')?;
         let mut n = 0;
@@ -196,8 +128,7 @@ impl<'a, W> CponWriter<'a, W>
         cnt += self.write_byte(b'}')?;
         Ok(cnt)
     }
-    fn write_imap(&mut self, map: &HashMap<i32, RpcValue>) -> WriteResult
-    {
+    fn write_imap(&mut self, map: &BTreeMap<i32, RpcValue>) -> WriteResult {
         let mut cnt = 0;
         cnt += self.write_byte(b'i')?;
         cnt += self.write_byte(b'{')?;
@@ -277,11 +208,11 @@ impl<'a, W> Writer for CponWriter<'a, W>
             },
             Value::Int(n) => self.write_int(*n),
             Value::UInt(n) => {
-                self.write_uint(*n);
+                self.write_uint(*n)?;
                 self.write_byte(b'u')
             },
             Value::String(s) => self.write_string(s),
-            Value::Blob(b) => unimplemented!(),
+            Value::Blob(_) => unimplemented!(),
             Value::Double(n) => self.write_double(*n),
             Value::Decimal(d) => self.write_decimal(d),
             Value::DateTime(d) => self.write_datetime(d),
@@ -325,6 +256,7 @@ impl<'a, R> CponReader<'a, R>
             if b > b' ' {
                 match b {
                     b'/' => {
+                        self.get_byte()?;
                         let b = self.get_byte()?;
                         match b {
                             b'*' => {
@@ -403,10 +335,10 @@ impl<'a, R> CponReader<'a, R>
             Err(e) => return Err(self.make_error(&format!("Invalid Map key, Utf8 error: {}", e))),
         }
     }
-    fn read_int(&mut self) -> Result<(i64, i32), ReadError>
+    fn read_int(&mut self, no_signum: bool) -> Result<(u64, bool, i32), ReadError>
     {
         let mut base = 10;
-        let mut val: i64 = 0;
+        let mut val: u64 = 0;
         let mut neg = false;
         let mut n = 0;
         let mut digit_cnt = 0;
@@ -417,6 +349,9 @@ impl<'a, R> CponReader<'a, R>
                 b'+' | b'-' => {
                     if n != 0 {
                         break;
+                    }
+                    if no_signum {
+                        return Err(self.make_error("Unexpected signum"))
                     }
                     let b = self.get_byte()?;
                     if b == b'-' {
@@ -436,7 +371,8 @@ impl<'a, R> CponReader<'a, R>
                 b'0' ..= b'9' => {
                     self.get_byte()?;
                     val *= base;
-                    val += (b as i64) - 48;
+                    //log::debug!("val: {:x} {}", val, (b as i64));
+                    val += (b - b'0') as u64;
                     digit_cnt += 1;
                 }
                 b'A' ..= b'F' => {
@@ -445,7 +381,7 @@ impl<'a, R> CponReader<'a, R>
                     }
                     self.get_byte()?;
                     val *= base;
-                    val += (b as i64) - 65 + 10;
+                    val += (b - b'A') as u64 + 10;
                     digit_cnt += 1;
                 }
                 b'a' ..= b'f' => {
@@ -454,21 +390,18 @@ impl<'a, R> CponReader<'a, R>
                     }
                     self.get_byte()?;
                     val *= base;
-                    val += (b as i64) - 97 + 10;
+                    val += (b - b'a') as u64 + 10;
                     digit_cnt += 1;
                 }
                 _ => break,
             }
             n += 1;
         }
-        if neg {
-            val = -val;
-        }
-        Ok((val, digit_cnt))
+        Ok((val, neg, digit_cnt))
     }
     fn read_number(&mut self) -> Result<Value, ReadError>
     {
-        let mut mantisa = 0;
+        let mut mantisa: u64 = 0;
         let mut exponent = 0;
         let mut decimals = 0;
         let mut dec_cnt = 0;
@@ -486,7 +419,7 @@ impl<'a, R> CponReader<'a, R>
             self.get_byte()?;
         }
 
-        let (n, digit_cnt) = self.read_int()?;
+        let (n, sgn, digit_cnt) = self.read_int(false)?;
         if digit_cnt == 0 {
             return Err(self.make_error("Number should contain at least one digit."))
         }
@@ -509,7 +442,7 @@ impl<'a, R> CponReader<'a, R>
                     state = State::Decimals;
                     is_decimal = true;
                     self.get_byte()?;
-                    let (n, digit_cnt) = self.read_int()?;
+                    let (n, sgn, digit_cnt) = self.read_int(true)?;
                     decimals = n;
                     dec_cnt = digit_cnt as i64;
                 }
@@ -520,8 +453,9 @@ impl<'a, R> CponReader<'a, R>
                     //state = State::Exponent;
                     is_decimal = true;
                     self.get_byte()?;
-                    let (n, digit_cnt) = self.read_int()?;
-                    exponent = n;
+                    let (n, neg, digit_cnt) = self.read_int(false)?;
+                    exponent = n as i64;
+                    if neg == true { exponent = -exponent; }
                     if digit_cnt == 0 {
                         return Err(self.make_error("Malformed number exponetional part."))
                     }
@@ -535,16 +469,16 @@ impl<'a, R> CponReader<'a, R>
                 mantisa *= 10;
             }
             mantisa += decimals;
-            if is_neg {
-                mantisa = -mantisa
-            }
-            return Ok(Value::new(Decimal::new(mantisa, (exponent - dec_cnt) as i8)))
+            let mut snum = mantisa as i64;
+            if is_neg { snum = -snum }
+            return Ok(Value::new(Decimal::new(snum, (exponent - dec_cnt) as i8)))
         }
         if is_uint {
-            return Ok(Value::new(mantisa as u64))
+            return Ok(Value::new(mantisa))
         }
-        if is_neg { mantisa = -mantisa }
-        return Ok(Value::new(mantisa))
+        let mut snum = mantisa as i64;
+        if is_neg { snum = -snum }
+        return Ok(Value::new(snum))
     }
     fn read_list(&mut self) -> Result<Value, ReadError>
     {
@@ -564,7 +498,7 @@ impl<'a, R> CponReader<'a, R>
     }
 
     fn read_map(&mut self) -> Result<Value, ReadError> {
-        let mut map: HashMap<String, RpcValue> = HashMap::new();
+        let mut map: BTreeMap<String, RpcValue> = BTreeMap::new();
         self.get_byte()?; // eat '{'
         loop {
             self.skip_white_insignificant()?;
@@ -595,7 +529,7 @@ impl<'a, R> CponReader<'a, R>
         if b != b'{' {
             return Err(self.make_error("Wrong IMap prefix, '{' expected."))
         }
-        let mut map: HashMap<i32, RpcValue> = HashMap::new();
+        let mut map: BTreeMap<i32, RpcValue> = BTreeMap::new();
         loop {
             self.skip_white_insignificant()?;
             let b = self.peek_byte();
@@ -603,7 +537,8 @@ impl<'a, R> CponReader<'a, R>
                 self.get_byte()?;
                 break;
             }
-            let key = self.read_int()?.0;
+            let (k, neg, _) = self.read_int(true)?;
+            let key = if neg == true { k as i64 * -1 } else { k as i64 };
             self.skip_white_insignificant()?;
             let val = self.read()?;
             map.insert(key as i32, val);
@@ -620,32 +555,38 @@ impl<'a, R> CponReader<'a, R>
                 if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(naive_str, "%Y-%m-%dT%H:%M:%S") {
                     let mut msec = 0;
                     let mut offset = 0;
-                    let mut rest = &naive_str[PATTERN.len()..];
-                    if rest.len() > 0 && rest.as_bytes()[1] == b'.' {
+                    let mut rest = &s[PATTERN.len()..];
+                    if rest.len() > 0 && rest.as_bytes()[0] == b'.' {
                         rest = &rest[1..];
                         if rest.len() >= 3 {
-                            if let Ok(msec) = rest[..3].parse::<i32>() {
+                            if let Ok(ms) = rest[..3].parse::<i32>() {
+                                msec = ms;
                                 rest = &rest[3..];
                             } else {
                                 return Err(self.make_error(&format!("Invalid DateTime msec part: '{}", rest)))
                             }
                         }
-                        if rest.len() == 3 {
+                    }
+                    if rest.len() > 0 {
+                        if rest.len() == 1 && rest.as_bytes()[0] == b'Z' {
+                        } else if rest.len() == 3 {
                             if let Ok(hrs) = rest.parse::<i32>() {
                                 offset = 60 * 60 * hrs;
                             } else {
                                 return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
                             }
-                        }
-                        if rest.len() == 5 {
+                        } else if rest.len() == 5 {
                             if let Ok(hrs) = rest.parse::<i32>() {
-                                offset = 60 * (60 * (hrs / 60) + (hrs % 60));
+                                offset = 60 * (60 * (hrs / 100) + (hrs % 100));
                             } else {
                                 return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
                             }
+                        } else {
+                            return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
                         }
                     }
-                    let dt = DateTime::from_epoch_msec_tz(ndt.timestamp(), offset);
+
+                    let dt = DateTime::from_epoch_msec_tz((ndt.timestamp() - (offset as i64)) * 1000 + (msec as i64), offset);
                     return Ok(Value::new(dt))
                 }
             }
@@ -681,6 +622,7 @@ impl<'a, R> Reader for CponReader<'a, R>
     where R: Read
 {
     fn try_read_meta(&mut self) -> Result<Option<MetaMap>, ReadError> {
+        self.skip_white_insignificant()?;
         let b = self.peek_byte();
         if b != b'<' {
             return Ok(None)
@@ -730,7 +672,7 @@ mod test
 {
     use crate::{MetaMap, RpcValue};
     use crate::Decimal;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
     use crate::cpon::CponReader;
     use crate::reader::Reader;
 
@@ -763,13 +705,13 @@ mod test
         let lst2 = rv.to_list();
         assert_eq!(lst2, &lst1);
 
-        let mut map: HashMap<String, RpcValue> = HashMap::new();
+        let mut map: BTreeMap<String, RpcValue> = BTreeMap::new();
         map.insert("foo".to_string(), RpcValue::new(123));
         map.insert("bar".to_string(), RpcValue::new("baz"));
         let cpon = r#"{"foo": 123,"bar":"baz"}"#;
         assert_eq!(RpcValue::from_cpon(cpon).unwrap().to_map(), &map);
 
-        let mut map: HashMap<i32, RpcValue> = HashMap::new();
+        let mut map: BTreeMap<i32, RpcValue> = BTreeMap::new();
         map.insert(1, RpcValue::new(123));
         map.insert(2, RpcValue::new("baz"));
         let cpon = r#"i{1: 123,2:"baz"}"#;

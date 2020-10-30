@@ -30,7 +30,7 @@ impl DateTime {
         // offset in quarters of hour
         const MASK: i64 = 127;
         msec *= MASK + 1;
-        msec &= !MASK;
+        //msec &= !MASK;
         let offset: i64 = (utc_offset_sec / 60 / 15).into();
         msec |= offset & MASK;
         DateTime(msec)
@@ -39,11 +39,11 @@ impl DateTime {
         Self::from_epoch_msec_tz(epoch_msec, 0)
     }
 
-    pub fn to_epoch_msec(&self) -> i64 {
-        let mut msec = self.0;
+    pub fn epoch_msec(&self) -> i64 {
+        let msec = self.0;
         // offset in quarters of hour
         const MASK: i64 = 127;
-        msec /= MASK + 1;
+        let msec= msec / (MASK + 1);
         msec
     }
     pub fn utc_offset(&self) -> i32 {
@@ -58,12 +58,40 @@ impl DateTime {
         (offset * 15 * 60) as i32
     }
 
-    pub fn to_naivedatetime(&self) -> chrono::NaiveDateTime {
-        chrono::NaiveDateTime::from_timestamp(self.to_epoch_msec(), 0)
+    pub fn to_chrono_naivedatetime(&self) -> chrono::NaiveDateTime {
+        let msec = self.epoch_msec();
+        chrono::NaiveDateTime::from_timestamp(msec / 1000, ((msec % 1000) * 1000) as u32)
     }
-    pub fn to_datetime(&self) -> chrono::DateTime<chrono::offset::FixedOffset> {
-        chrono::DateTime::from_utc(self.to_naivedatetime()
+    pub fn to_chrono_datetime(&self) -> chrono::DateTime<chrono::offset::FixedOffset> {
+        chrono::DateTime::from_utc(self.to_chrono_naivedatetime()
                                    , chrono::FixedOffset::east(self.utc_offset()))
+    }
+    pub fn to_cpon_string(&self) -> String {
+        let dt = self.to_chrono_datetime();
+        let mut s = format!("{}", dt.format("%Y-%m-%dT%H:%M:%S"));
+        let ms = self.epoch_msec() % 1000;
+        if ms > 0 {
+            s.push_str(&format!(".{:03}", ms));
+        }
+        let mut offset = self.utc_offset();
+        if offset == 0 {
+            s.push('Z');
+        }
+        else {
+            if offset < 0 {
+                s.push('-');
+                offset = -offset;
+            } else {
+                s.push('+');
+            }
+            let offset_hr = offset / 60 / 60;
+            let offset_min = offset / 60 % 60;
+            s += &format!("{:02}", offset_hr);
+            if offset_min > 0 {
+                s += &format!("{:02}", offset_min);
+            }
+        }
+        s
     }
 }
 

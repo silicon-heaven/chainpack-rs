@@ -2,7 +2,7 @@ use crate::{RpcValue, MetaMap, metamap::MetaKey, Decimal, DateTime, WriteResult,
 use std::io;
 use crate::writer::{ByteWriter, Writer};
 use std::io::{Write, Read};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use crate::reader::{Reader, ByteReader, ReadError};
 use crate::rpcvalue::FromValue;
 
@@ -77,8 +77,10 @@ impl<'a, W> ChainPackWriter<'a, W>
     }
     /// number of bytes needed to encode bit_len
     fn bytes_needed(bit_len: u32) -> u32 {
-        let mut cnt = 0;
-        if bit_len <= 28 {
+        let cnt;
+        if bit_len == 0 {
+            cnt = 1;
+        } else if bit_len <= 28 {
             cnt = (bit_len - 1) / 7 + 1;
         } else {
             cnt = (bit_len - 1) / 8 + 2;
@@ -111,7 +113,7 @@ impl<'a, W> ChainPackWriter<'a, W>
         assert!(byte_cnt <= BYTE_CNT_MAX, format!("Max int byte size {} exceeded", BYTE_CNT_MAX));
         let mut bytes: [u8; BYTE_CNT_MAX as usize] = [0; BYTE_CNT_MAX as usize];
         let mut num = number;
-        let mut len = 0;
+        let mut len;
         for i in (0 .. byte_cnt).rev() {
             let r = (num & 255) as u8;
             bytes[i as usize] = r;
@@ -127,17 +129,17 @@ impl<'a, W> ChainPackWriter<'a, W>
         else {
             bytes[0] = (0xf0 | (byte_cnt - 5)) as u8;
         }
-        let mut cnt = 0;
+        let cnt = self.byte_writer.count();
         for i in 0 .. byte_cnt {
             let r = bytes[i as usize];
             self.write_byte(r)?;
         }
-        return Ok(cnt)
+        return Ok(self.byte_writer.count() - cnt)
     }
     pub fn write_uint_data(&mut self, number: u64) -> WriteResult {
         let bitlen = Self::significant_bits_part_length(number);
         let cnt = self.write_uint_data_helper(number, bitlen)?;
-        Ok(cnt)
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_int_data(&mut self, number: i64) -> WriteResult {
         let mut num;
@@ -157,12 +159,12 @@ impl<'a, W> ChainPackWriter<'a, W>
             num |= sign_bit_mask;
         }
         let cnt = self.write_uint_data_helper(num as u64, bitlen)?;
-        Ok(cnt)
+        Ok(self.byte_writer.count() - cnt)
     }
 
     fn write_int(&mut self, n: i64) -> WriteResult {
-        let mut cnt = 0;
-        if n < 64 {
+        let cnt = self.byte_writer.count();
+        if n >= 0 && n < 64 {
             self.write_byte(((n % 64) + 64) as u8)?;
         }
         else {
@@ -172,7 +174,7 @@ impl<'a, W> ChainPackWriter<'a, W>
         Ok(self.byte_writer.count() - cnt)
     }
     fn write_uint(&mut self, n: u64) -> WriteResult {
-        let cnt = 0;
+        let cnt = self.byte_writer.count();
         if n < 64 {
             self.write_byte((n % 64) as u8)?;
         }
@@ -185,7 +187,7 @@ impl<'a, W> ChainPackWriter<'a, W>
     fn write_double(&mut self, n: f64) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::Double as u8)?;
         let bytes = n.to_le_bytes();
-        self.write_bytes(&bytes);
+        self.write_bytes(&bytes)?;
         Ok(self.byte_writer.count() - cnt)
     }
     fn write_decimal(&mut self, decimal: &Decimal) -> WriteResult {
@@ -197,8 +199,8 @@ impl<'a, W> ChainPackWriter<'a, W>
     }
     fn write_datetime(&mut self, dt: &DateTime) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::DateTime as u8)?;
-        let mut msecs = dt.to_epoch_msec() - SHV_EPOCH_MSEC;
-        let offset = (dt.utc_offset() / 15) & 0x7F;
+        let mut msecs = dt.epoch_msec() - SHV_EPOCH_MSEC;
+        let offset = (dt.utc_offset() / 60 / 15) & 0x7F;
         let ms = msecs % 1000;
         if ms == 0 {
             msecs /= 1000;
@@ -225,7 +227,7 @@ impl<'a, W> ChainPackWriter<'a, W>
         self.write_byte(PackingSchema::TERM as u8)?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_map(&mut self, map: &HashMap<String, RpcValue>) -> WriteResult {
+    fn write_map(&mut self, map: &BTreeMap<String, RpcValue>) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::Map as u8)?;
         for (k, v) in map {
             self.write_string(k)?;
@@ -234,7 +236,7 @@ impl<'a, W> ChainPackWriter<'a, W>
         self.write_byte(PackingSchema::TERM as u8)?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_imap(&mut self, map: &HashMap<i32, RpcValue>) -> WriteResult {
+    fn write_imap(&mut self, map: &BTreeMap<i32, RpcValue>) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::IMap as u8)?;
         for (k, v) in map {
             self.write_int(*k as i64)?;
@@ -260,13 +262,12 @@ impl<'a, W> ChainPackWriter<'a, W>
 impl<'a, W> Writer for ChainPackWriter<'a, W>
     where W: io::Write
 {
-    fn write_meta(&mut self, map: &MetaMap) -> WriteResult
-    {
+    fn write_meta(&mut self, map: &MetaMap) -> WriteResult {
         let cnt = self.byte_writer.count();
         self.write_byte(PackingSchema::MetaMap as u8)?;
         for k in map.0.iter() {
             match &k.key {
-                MetaKey::String(s) => self.write_blob(s.as_bytes())?,
+                MetaKey::String(s) => self.write_string(s)?,
                 MetaKey::Int(i) => self.write_int(*i as i64)?,
             };
             self.write(&k.value)?;
@@ -274,8 +275,7 @@ impl<'a, W> Writer for ChainPackWriter<'a, W>
         self.write_byte(PackingSchema::TERM as u8)?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write(&mut self, val: &RpcValue) -> WriteResult
-    {
+    fn write(&mut self, val: &RpcValue) -> WriteResult {
         let cnt = self.byte_writer.count();
         let mm = val.meta();
         if !mm.is_empty() {
@@ -284,8 +284,7 @@ impl<'a, W> Writer for ChainPackWriter<'a, W>
         self.write_value(val.value())?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_value(&mut self, val: &Value) -> WriteResult
-    {
+    fn write_value(&mut self, val: &Value) -> WriteResult {
         let cnt = self.byte_writer.count();
         match val {
             Value::Null => self.write_byte(PackingSchema::Null as u8)?,
@@ -307,7 +306,6 @@ impl<'a, W> Writer for ChainPackWriter<'a, W>
         };
         Ok(self.byte_writer.count() - cnt)
     }
-
 }
 
 pub struct ChainPackReader<'a, R>
@@ -423,8 +421,9 @@ impl<'a, R> ChainPackReader<'a, R>
     fn read_list_data(&mut self) -> Result<Value, ReadError> {
         let mut lst = Vec::new();
         loop {
-            let b = self.get_byte()?;
+            let b = self.peek_byte();
             if b == PackingSchema::TERM as u8 {
+                self.get_byte()?;
                 break;
             }
             let val = self.read()?;
@@ -433,10 +432,11 @@ impl<'a, R> ChainPackReader<'a, R>
         return Ok(Value::new(lst))
     }
     fn read_map_data(&mut self) -> Result<Value, ReadError> {
-        let mut map: HashMap<String, RpcValue> = HashMap::new();
+        let mut map: BTreeMap<String, RpcValue> = BTreeMap::new();
         loop {
-            let b = self.get_byte()?;
+            let b = self.peek_byte();
             if b == PackingSchema::TERM as u8 {
+                self.get_byte()?;
                 break;
             }
             let k = self.read()?;
@@ -453,10 +453,11 @@ impl<'a, R> ChainPackReader<'a, R>
         return Ok(Value::new(map))
     }
     fn read_imap_data(&mut self) -> Result<Value, ReadError> {
-        let mut map: HashMap<i32, RpcValue> = HashMap::new();
+        let mut map: BTreeMap<i32, RpcValue> = BTreeMap::new();
         loop {
-            let b = self.get_byte()?;
+            let b = self.peek_byte();
             if b == PackingSchema::TERM as u8 {
+                self.get_byte()?;
                 break;
             }
             let k = self.read()?;
@@ -482,18 +483,21 @@ impl<'a, R> ChainPackReader<'a, R>
             offset = (d & 0x7F) as i8;
             offset <<= 1;
             offset >>= 1; // sign extension
+            //log::debug!("1----------> offset: {}", offset);
             d >>= 7;
         }
         if has_not_msec {
             d *= 1000;
         }
         d += SHV_EPOCH_MSEC;
-        let dt = DateTime::from_epoch_msec_tz(d, (offset * 15) as i32 * 60);
+        let dt = DateTime::from_epoch_msec_tz(d, (offset as i32 * 15) * 60);
         return Ok(Value::new(dt))
     }
     fn read_double_data(&mut self) -> Result<Value, ReadError> {
         let mut buff: [u8;8] = [0;8];
-        self.byte_reader.read.read(&mut buff);
+        if let Err(e) = self.byte_reader.read.read(&mut buff) {
+            return Err(self.make_error(&format!("{}", e)))
+        }
         let d = f64::from_le_bytes(buff);
         return Ok(Value::new(d))
     }
@@ -513,6 +517,7 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
         if b != PackingSchema::MetaMap as u8 {
             return Ok(None)
         }
+        self.get_byte()?;
         let mut map = MetaMap::new();
         loop {
             let b = self.peek_byte();
@@ -520,13 +525,18 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
                 self.get_byte()?;
                 break;
             }
-            let key = self.read()?;
+            let key = self.read_value()?;
             let val = self.read()?;
-            if key.is_int() {
-                map.insert(key.to_i32(), val);
-            }
-            else {
-                map.insert(key.to_str(), val);
+            match key {
+                Value::Int(i) => {
+                    map.insert(i as i32, val);
+                }
+                Value::String(s) => {
+                    map.insert(&**s, val);
+                }
+                _ => {
+                    return Err(self.make_error(&format!("MetaMap key must be int or string, got: {}", key.type_name())))
+                }
             }
         }
         Ok(Some(map))

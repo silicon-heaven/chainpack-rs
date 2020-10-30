@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fmt;
 use log;
 
@@ -17,18 +17,18 @@ use crate::chainpack::ChainPackReader;
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
 const EMPTY_STR_REF: &str = "";
-const EMPTY_BYTES_REF: &[u8] = EMPTY_STR_REF.as_bytes();
+const EMPTY_BLOB_REF: &[u8] = EMPTY_STR_REF.as_bytes();
 lazy_static! {
     static ref EMPTY_LIST_REF: Vec<RpcValue> = {
         let v = Vec::new();
         v
     };
-    static ref EMPTY_MAP_REF: HashMap<String, RpcValue> = {
-        let m = HashMap::new();
+    static ref EMPTY_MAP_REF: BTreeMap<String, RpcValue> = {
+        let m = BTreeMap::new();
         m
     };
-    static ref EMPTY_IMAP_REF: HashMap<i32, RpcValue> = {
-        let m = HashMap::new();
+    static ref EMPTY_IMAP_REF: BTreeMap<i32, RpcValue> = {
+        let m = BTreeMap::new();
         m
     };
     static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
@@ -46,8 +46,8 @@ pub enum Value {
 	String(Box<String>),
 	Blob(Box<Vec<u8>>),
 	List(Box<Vec<RpcValue>>),
-	Map(Box<HashMap<String, RpcValue>>),
-	IMap(Box<HashMap<i32, RpcValue>>),
+	Map(Box<BTreeMap<String, RpcValue>>),
+	IMap(Box<BTreeMap<i32, RpcValue>>),
 }
 
 impl Value {
@@ -124,8 +124,8 @@ macro_rules! from_value_box {
 
 from_value_box!(String, String);
 from_value_box!(Vec<RpcValue>, List);
-from_value_box!(HashMap<String, RpcValue>, Map);
-from_value_box!(HashMap<i32, RpcValue>, IMap);
+from_value_box!(BTreeMap<String, RpcValue>, Map);
+from_value_box!(BTreeMap<i32, RpcValue>, IMap);
 
 #[derive(PartialEq, Clone)]
 pub struct RpcValue {
@@ -220,7 +220,7 @@ impl RpcValue {
 		}
 	}
 	pub fn to_u32(&self) -> u32 { self.to_u64() as u32 }
-	pub fn to_double(&self) -> f64 {
+	pub fn to_f64(&self) -> f64 {
 		match &self.value {
 			Value::Double(d) => *d,
 			_ => 0.,
@@ -244,19 +244,25 @@ impl RpcValue {
 			_ => EMPTY_STR_REF,
 		}
 	}
+	pub fn to_blob(&self) -> &[u8] {
+		match &self.value {
+			Value::Blob(b) => b,
+			_ => EMPTY_BLOB_REF,
+		}
+	}
 	pub fn to_list(&self) -> &Vec<RpcValue> {
 		match &self.value {
 			Value::List(b) => &b,
 			_ => &EMPTY_LIST_REF,
 		}
 	}
-	pub fn to_map(&self) -> &HashMap<String, RpcValue> {
+	pub fn to_map(&self) -> &BTreeMap<String, RpcValue> {
 		match &self.value {
 			Value::Map(b) => &b,
 			_ => &EMPTY_MAP_REF,
 		}
 	}
-	pub fn to_imap(&self) -> &HashMap<i32, RpcValue> {
+	pub fn to_imap(&self) -> &BTreeMap<i32, RpcValue> {
 		match &self.value {
 			Value::IMap(b) => &b,
 			_ => &EMPTY_IMAP_REF,
@@ -272,7 +278,7 @@ impl RpcValue {
 		}
 		match String::from_utf8(buff) {
 			Ok(s) => s,
-			Err(e) => String::new(),
+			Err(_) => String::new(),
 		}
 	}
 	pub fn to_chainpack(&self) -> Vec<u8> {
@@ -309,7 +315,7 @@ impl fmt::Display for RpcValue {
 
 #[cfg(test)]
 mod test {
-	use std::collections::HashMap;
+	use std::collections::BTreeMap;
 	use std::mem::size_of;
 
 	use chrono::Offset;
@@ -321,11 +327,11 @@ mod test {
 
 	macro_rules! show_size {
 		(header) => (
-			println!("{:<22} {:>4}    ", "Type", "T");
-			println!("------------------------------");
+			log::debug!("{:<22} {:>4}    ", "Type", "T");
+			log::debug!("------------------------------");
 		);
 		($t:ty) => (
-			println!("{:<22} {:4}", stringify!($t), size_of::<$t>())
+			log::debug!("{:<22} {:4}", stringify!($t), size_of::<$t>())
 		)
 	}
 
@@ -354,7 +360,7 @@ mod test {
 		let rv = RpcValue::new(123);
 		assert_eq!(rv.to_i32(), 123);
 		let rv = RpcValue::new(12.3);
-		assert_eq!(rv.to_double(), 12.3);
+		assert_eq!(rv.to_f64(), 12.3);
 
 		let dt = DateTime::now();
 		let rv = RpcValue::new(dt.clone());
@@ -366,24 +372,24 @@ mod test {
 
 		let dt = chrono::offset::Utc::now();
 		let rv = RpcValue::new(dt.clone());
-		assert_eq!(rv.to_datetime().to_epoch_msec(), dt.timestamp_millis());
+		assert_eq!(rv.to_datetime().epoch_msec(), dt.timestamp_millis());
 
 		let dt = chrono::offset::Local::now();
 		let rv = RpcValue::new(dt.clone());
-		assert_eq!(rv.to_datetime().to_epoch_msec() + rv.to_datetime().utc_offset() as i64 * 1000
+		assert_eq!(rv.to_datetime().epoch_msec() + rv.to_datetime().utc_offset() as i64 * 1000
 				   , dt.timestamp_millis() + dt.offset().fix().local_minus_utc() as i64 * 1000);
 
 		let vec1 = vec![RpcValue::new(123), RpcValue::new("foo")];
 		let rv = RpcValue::new(vec1.clone());
 		assert_eq!(rv.to_list(), &vec1);
 
-		let mut m: HashMap<String, RpcValue> = HashMap::new();
+		let mut m: BTreeMap<String, RpcValue> = BTreeMap::new();
 		m.insert("foo".to_string(), RpcValue::new(123));
 		m.insert("bar".to_string(), RpcValue::new("foo"));
 		let rv = RpcValue::new(m.clone());
 		assert_eq!(rv.to_map(), &m);
 
-		let mut m: HashMap<i32, RpcValue> = HashMap::new();
+		let mut m: BTreeMap<i32, RpcValue> = BTreeMap::new();
 		m.insert(1, RpcValue::new(123));
 		m.insert(2, RpcValue::new("foo"));
 		let rv = RpcValue::new(m.clone());
