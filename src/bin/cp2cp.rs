@@ -84,11 +84,11 @@ fn main() {
             .help("Output is ChainPack"))
         .get_matches();
 
-    log::trace!("trace log test");
-    log::debug!("debug log test");
-    log::info!("info log test");
-    log::warn!("warn log test");
-    log::error!("error log test");
+    // log::trace!("trace log test");
+    // log::debug!("debug log test");
+    // log::info!("info log test");
+    // log::warn!("warn log test");
+    // log::error!("error log test");
 
     let o_file = matches.value_of("INPUT");
     let o_indent = matches.value_of("indent");

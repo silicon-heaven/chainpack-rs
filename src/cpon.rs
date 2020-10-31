@@ -208,36 +208,42 @@ impl<'a, W> CponWriter<'a, W>
     }
     fn write_map(&mut self, map: &BTreeMap<String, RpcValue>) -> WriteResult {
         let cnt = self.byte_writer.count();
+        let is_oneliner = Self::is_oneliner_map(map);
         self.write_byte(b'{')?;
+        self.start_block();
         let mut n = 0;
         for (k, v) in map {
-            if n == 0 {
-                n += 1;
-            } else {
+            if n > 0 {
                 self.write_byte(b',')?;
             }
+            self.indent_element(is_oneliner, n == 0);
             self.write_string(k)?;
             self.write_byte(b':')?;
             self.write(v)?;
+            n += 1;
         }
+        self.end_block(is_oneliner);
         self.write_byte(b'}')?;
         Ok(self.byte_writer.count() - cnt)
     }
     fn write_imap(&mut self, map: &BTreeMap<i32, RpcValue>) -> WriteResult {
         let cnt = self.byte_writer.count();
+        let is_oneliner = Self::is_oneliner_imap(map);
         self.write_byte(b'i')?;
         self.write_byte(b'{')?;
+        self.start_block();
         let mut n = 0;
         for (k, v) in map {
-            if n == 0 {
-                n += 1;
-            } else {
+            if n > 0 {
                 self.write_byte(b',')?;
             }
+            self.indent_element(is_oneliner, n == 0);
             self.write_int(*k as i64)?;
             self.write_byte(b':')?;
             self.write(v)?;
+            n += 1;
         }
+        self.end_block(is_oneliner);
         self.write_byte(b'}')?;
         Ok(self.byte_writer.count() - cnt)
     }
@@ -259,20 +265,15 @@ impl<'a, W> Writer for CponWriter<'a, W>
     fn write_meta(&mut self, map: &MetaMap) -> WriteResult
     {
         let cnt: usize = self.byte_writer.count();
+        let is_oneliner = Self::is_oneliner_meta(map);
         self.write_byte(b'<')?;
+        self.start_block();
         let mut n = 0;
         for k in map.0.iter() {
-            if n == 0 {
-                n += 1;
-            } else {
+            if n > 0 {
                 self.write_byte(b',')?;
             }
-            if !self.indent.is_empty() {
-                self.write_byte(b'\n')?;
-                let idn = self.indent.as_bytes();
-                self.byte_writer.write_bytes(idn)?;
-            }
-
+            self.indent_element(is_oneliner, n == 0);
             match &k.key {
                 MetaKey::String(s) => {
                     self.write_string(s)?;
@@ -285,9 +286,7 @@ impl<'a, W> Writer for CponWriter<'a, W>
             self.write(&k.value)?;
             n += 1;
         }
-        if !self.indent.is_empty() {
-            self.write_byte(b'\n')?;
-        }
+        self.end_block(is_oneliner);
         self.write_byte(b'>')?;
         Ok(self.byte_writer.count() - cnt)
     }
