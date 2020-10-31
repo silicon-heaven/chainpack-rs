@@ -6,6 +6,8 @@ use std::collections::BTreeMap;
 use crate::reader::{Reader, ByteReader, ReadError};
 use crate::rpcvalue::FromValue;
 
+#[warn(non_camel_case_types)]
+#[allow(dead_code)]
 pub(crate) enum PackingSchema {
     Null = 128,
     UInt,
@@ -14,7 +16,7 @@ pub(crate) enum PackingSchema {
     Bool,
     Blob,
     String,
-    DateTimeEpoch_depr, // deprecated
+    DateTimeEpochDepr, // deprecated
     List,
     Map,
     IMap,
@@ -113,12 +115,10 @@ impl<'a, W> ChainPackWriter<'a, W>
         assert!(byte_cnt <= BYTE_CNT_MAX, format!("Max int byte size {} exceeded", BYTE_CNT_MAX));
         let mut bytes: [u8; BYTE_CNT_MAX as usize] = [0; BYTE_CNT_MAX as usize];
         let mut num = number;
-        let mut len;
         for i in (0 .. byte_cnt).rev() {
             let r = (num & 255) as u8;
             bytes[i as usize] = r;
             num = num >> 8;
-            len = i;
         }
         if bit_len <= 28 {
             let mut mask = 0xf0 << (4 - byte_cnt);

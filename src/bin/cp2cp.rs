@@ -1,14 +1,13 @@
 use clap::{Arg, App};
-use std::{process, io, fs, env};
+use std::{process, io, fs};
 use std::io::{BufReader, BufRead, BufWriter, stdout};
 use chainpackrpc::{CponReader, ChainPackReader, ChainPackWriter, CponWriter};
 use chainpackrpc::reader::Reader;
 use chainpackrpc::writer::Writer;
-use env_logger::{Builder, WriteStyle};
+use env_logger::{WriteStyle};
 use chrono::Local;
 use std::io::Write;
 use std::path::Path;
-use std::ffi::OsString;
 use env_logger;
 
 fn main() {
@@ -29,12 +28,12 @@ fn main() {
             }
             let mut style = buf.style();
             style.set_color(env_logger::fmt::Color::Green);
-            write!(buf,
+            let _ = write!(buf,
                    "{}",
                    style.value(Local::now().format("%H:%M:%S.%3f")),
             );
             style.set_color(env_logger::fmt::Color::Yellow);
-            write!(buf, "{}", style.value(&format!("[{}:{}]", short_name(record.file().unwrap_or("")),
+            let _ = write!(buf, "{}", style.value(&format!("[{}:{}]", short_name(record.file().unwrap_or("")),
                      record.line().unwrap_or(0))),
             );
             match record.level() {

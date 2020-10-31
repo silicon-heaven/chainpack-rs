@@ -42,36 +42,56 @@ impl<'a, W> CponWriter<'a, W>
         }
         return true;
     }
-    fn is_oneliner_map(map: &BTreeMap<String, RpcValue>) -> bool {
-        if map.len() > 5 {
-            return false;
-        }
-        let tt = map.iter();
-        for (k, v) in map.iter() {
-            match v.value() {
-                Value::List(_) => return false,
-                Value::Map(_) => return false,
-                Value::IMap(_) => return false,
-                _ => continue,
+    fn is_oneliner_map<K>(iter: &mut dyn Iterator<Item = (K, &RpcValue)>) -> bool {
+        let mut n = 0;
+        loop {
+            if n == 5 {
+                return false
             }
-        }
-        return true;
+            match iter.next() {
+                Some(val) => {
+                    match val.1.value() {
+                        Value::List(_) => return false,
+                        Value::Map(_) => return false,
+                        Value::IMap(_) => return false,
+                        _ => (),
+                    }
+                },
+                None => break,
+            };
+            n += 1;
+        };
+        return true
     }
-    fn is_oneliner_imap(map: &BTreeMap<i32, RpcValue>) -> bool {
-        if map.len() > 5 {
-            return false;
-        }
-        let tt = map.iter();
-        for (k, v) in map.iter() {
-            match v.value() {
-                Value::List(_) => return false,
-                Value::Map(_) => return false,
-                Value::IMap(_) => return false,
-                _ => continue,
-            }
-        }
-        return true;
-    }
+    // fn is_oneliner_map(map: &BTreeMap<String, RpcValue>) -> bool {
+    //     if map.len() > 5 {
+    //         return false;
+    //     }
+    //     for (_, v) in map.iter() {
+    //         match v.value() {
+    //             Value::List(_) => return false,
+    //             Value::Map(_) => return false,
+    //             Value::IMap(_) => return false,
+    //             _ => continue,
+    //         }
+    //     }
+    //     return true;
+    // }
+    // fn is_oneliner_imap(map: &BTreeMap<i32, RpcValue>) -> bool {
+    //     if map.len() > 5 {
+    //         return false;
+    //     }
+    //     let tt = map.iter();
+    //     for (k, v) in map.iter() {
+    //         match v.value() {
+    //             Value::List(_) => return false,
+    //             Value::Map(_) => return false,
+    //             Value::IMap(_) => return false,
+    //             _ => continue,
+    //         }
+    //     }
+    //     return true;
+    // }
     fn is_oneliner_meta(map: &MetaMap) -> bool {
         if map.0.len() > 5 {
             return false;
@@ -94,7 +114,7 @@ impl<'a, W> CponWriter<'a, W>
         let cnt = self.byte_writer.count();
         self.nest_count -= 1;
         if !self.indent.is_empty() {
-            self.indent_element(is_oneliner, true);
+            self.indent_element(is_oneliner, true)?;
         }
         Ok(self.byte_writer.count() - cnt)
     }
@@ -181,7 +201,7 @@ impl<'a, W> CponWriter<'a, W>
         return Ok(self.byte_writer.count() - cnt)
     }
     fn write_datetime(&mut self, dt: &DateTime) -> WriteResult {
-        let mut cnt = self.write_bytes("d\"".as_bytes())?;
+        let cnt = self.write_bytes("d\"".as_bytes())?;
         let s = dt.to_cpon_string();
         self.write_bytes(s.as_bytes())?;
         self.write_byte(b'"')?;
@@ -198,17 +218,17 @@ impl<'a, W> CponWriter<'a, W>
             if n > 0 {
                 self.write_byte(b',')?;
             }
-            self.indent_element(is_oneliner, n == 0);
+            self.indent_element(is_oneliner, n == 0)?;
             self.write(v)?;
             n += 1;
         }
-        self.end_block(is_oneliner);
+        self.end_block(is_oneliner)?;
         self.write_byte(b']')?;
         Ok(self.byte_writer.count() - cnt)
     }
     fn write_map(&mut self, map: &BTreeMap<String, RpcValue>) -> WriteResult {
         let cnt = self.byte_writer.count();
-        let is_oneliner = Self::is_oneliner_map(map);
+        let is_oneliner = Self::is_oneliner_map(&mut map.iter());
         self.write_byte(b'{')?;
         self.start_block();
         let mut n = 0;
@@ -216,19 +236,19 @@ impl<'a, W> CponWriter<'a, W>
             if n > 0 {
                 self.write_byte(b',')?;
             }
-            self.indent_element(is_oneliner, n == 0);
+            self.indent_element(is_oneliner, n == 0)?;
             self.write_string(k)?;
             self.write_byte(b':')?;
             self.write(v)?;
             n += 1;
         }
-        self.end_block(is_oneliner);
+        self.end_block(is_oneliner)?;
         self.write_byte(b'}')?;
         Ok(self.byte_writer.count() - cnt)
     }
     fn write_imap(&mut self, map: &BTreeMap<i32, RpcValue>) -> WriteResult {
         let cnt = self.byte_writer.count();
-        let is_oneliner = Self::is_oneliner_imap(map);
+        let is_oneliner = Self::is_oneliner_map(&mut map.iter());
         self.write_byte(b'i')?;
         self.write_byte(b'{')?;
         self.start_block();
@@ -237,13 +257,13 @@ impl<'a, W> CponWriter<'a, W>
             if n > 0 {
                 self.write_byte(b',')?;
             }
-            self.indent_element(is_oneliner, n == 0);
+            self.indent_element(is_oneliner, n == 0)?;
             self.write_int(*k as i64)?;
             self.write_byte(b':')?;
             self.write(v)?;
             n += 1;
         }
-        self.end_block(is_oneliner);
+        self.end_block(is_oneliner)?;
         self.write_byte(b'}')?;
         Ok(self.byte_writer.count() - cnt)
     }
@@ -273,7 +293,7 @@ impl<'a, W> Writer for CponWriter<'a, W>
             if n > 0 {
                 self.write_byte(b',')?;
             }
-            self.indent_element(is_oneliner, n == 0);
+            self.indent_element(is_oneliner, n == 0)?;
             match &k.key {
                 MetaKey::String(s) => {
                     self.write_string(s)?;
@@ -286,7 +306,7 @@ impl<'a, W> Writer for CponWriter<'a, W>
             self.write(&k.value)?;
             n += 1;
         }
-        self.end_block(is_oneliner);
+        self.end_block(is_oneliner)?;
         self.write_byte(b'>')?;
         Ok(self.byte_writer.count() - cnt)
     }
@@ -495,7 +515,7 @@ impl<'a, R> CponReader<'a, R>
     }
     fn read_number(&mut self) -> Result<Value, ReadError>
     {
-        let mut mantisa: u64 = 0;
+        let mut mantisa;
         let mut exponent = 0;
         let mut decimals = 0;
         let mut dec_cnt = 0;
@@ -513,13 +533,13 @@ impl<'a, R> CponReader<'a, R>
             self.get_byte()?;
         }
 
-        let (n, sgn, digit_cnt) = self.read_int(false)?;
+        let (n, _, digit_cnt) = self.read_int(false)?;
         if digit_cnt == 0 {
             return Err(self.make_error("Number should contain at least one digit."))
         }
         mantisa = n;
         #[derive(PartialEq)]
-        enum State { Mantisa, Decimals, Exponent };
+        enum State { Mantisa, Decimals,  };
         let mut state = State::Mantisa;
         loop {
             let b = self.peek_byte();
@@ -536,7 +556,7 @@ impl<'a, R> CponReader<'a, R>
                     state = State::Decimals;
                     is_decimal = true;
                     self.get_byte()?;
-                    let (n, sgn, digit_cnt) = self.read_int(true)?;
+                    let (n, _, digit_cnt) = self.read_int(true)?;
                     decimals = n;
                     dec_cnt = digit_cnt as i64;
                 }

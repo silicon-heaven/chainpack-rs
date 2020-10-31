@@ -34,6 +34,7 @@ lazy_static! {
     static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
 }
 
+#[warn(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
 	Null,
@@ -284,8 +285,11 @@ impl RpcValue {
 	pub fn to_chainpack(&self) -> Vec<u8> {
 		let mut buff: Vec<u8> = Vec::new();
 		let mut wr = ChainPackWriter::new(&mut buff);
-		wr.write(self);
-		buff
+		let r = wr.write(self);
+		match r {
+			Ok(_) => buff,
+			Err(_) => Vec::new(),
+		}
 	}
 
 	pub fn from_cpon(s: &str) -> ReadResult {

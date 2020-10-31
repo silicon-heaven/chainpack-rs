@@ -92,10 +92,9 @@ fn test_vals() {
         let mant = -123456;
         let exp_min = 1;
         let exp_max = 16;
-        let step = 1;
         for exp in exp_min ..= exp_max {
             let n = Decimal::new(mant, exp);
-            let (m,e) = n.decode();
+            //let (m,e) = n.decode();
             log::debug!("\t mant: {} exp: {}, n: {}", mant, exp, n.to_cpon_string());
             let rv = RpcValue::new(n.clone());
             let cpon = to_cpon(&rv);
@@ -117,7 +116,7 @@ fn test_vals() {
         let mut n = n_min;
         while n < n_max {
             let rv = RpcValue::new(n);
-            let cpon = to_cpon(&rv);
+            let _ = to_cpon(&rv);
             let cpk = to_chainpack(&rv);
             let rv_cpk = from_chainpack(&cpk);
             // log::debug!("\t n: {} cpon: {}", n, cpon);
@@ -130,7 +129,7 @@ fn test_vals() {
         let mut n = -f64::MAX / 10.;
         while n != 0. {
             let rv = RpcValue::new(n);
-            let cpon = to_cpon(&rv);
+            let _ = to_cpon(&rv);
             let cpk = to_chainpack(&rv);
             let rv_cpk = from_chainpack(&cpk);
             //log::debug!("\t n: {:e} cpon: {}", n, cpon);

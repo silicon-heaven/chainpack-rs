@@ -1,16 +1,16 @@
 use chainpackrpc::{RpcValue};
 use log;
 
-fn to_bin(v: &[u8]) -> String {
-    let mut s = String::new();
-    for b in v {
-        if !s.is_empty() {
-            s.push('|');
-        }
-        s += &format!("{:08b}", b);
-    }
-    s
-}
+// fn to_bin(v: &[u8]) -> String {
+//     let mut s = String::new();
+//     for b in v {
+//         if !s.is_empty() {
+//             s.push('|');
+//         }
+//         s += &format!("{:08b}", b);
+//     }
+//     s
+// }
 
 fn main() {
     env_logger::init();

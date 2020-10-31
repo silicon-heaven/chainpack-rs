@@ -8,11 +8,11 @@ pub struct ReadError {
     line: usize,
     col: usize,
 }
-impl ReadError {
-    fn new(msg: String, line: usize, col: usize) -> ReadError {
-        ReadError { msg, line, col }
-    }
-}
+//impl ReadError {
+//    fn new(msg: String, line: usize, col: usize) -> ReadError {
+//        ReadError { msg, line, col }
+//    }
+//}
 
 pub(crate) struct ByteReader<'a, R>
 {
