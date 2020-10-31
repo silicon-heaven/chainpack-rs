@@ -11,6 +11,7 @@ pub struct CponWriter<'a, W>
 {
     byte_writer: ByteWriter<'a, W>,
     indent: String,
+    nest_count: usize,
 }
 
 impl<'a, W> CponWriter<'a, W>
@@ -19,13 +20,101 @@ impl<'a, W> CponWriter<'a, W>
     pub fn new(write: &'a mut W) -> Self {
         CponWriter {
             byte_writer: ByteWriter::new(write),
-            indent: "".to_string()
+            indent: "".to_string(),
+            nest_count: 0,
         }
     }
     pub fn set_indent(&mut self, indent: &str) {
         self.indent = indent.to_string();
     }
 
+    fn is_oneliner_list(lst: &Vec<RpcValue>) -> bool {
+        if lst.len() > 10 {
+            return false;
+        }
+        for it in lst.iter() {
+            match it.value() {
+                Value::List(_) => return false,
+                Value::Map(_) => return false,
+                Value::IMap(_) => return false,
+                _ => continue,
+            }
+        }
+        return true;
+    }
+    fn is_oneliner_map(map: &BTreeMap<String, RpcValue>) -> bool {
+        if map.len() > 5 {
+            return false;
+        }
+        let tt = map.iter();
+        for (k, v) in map.iter() {
+            match v.value() {
+                Value::List(_) => return false,
+                Value::Map(_) => return false,
+                Value::IMap(_) => return false,
+                _ => continue,
+            }
+        }
+        return true;
+    }
+    fn is_oneliner_imap(map: &BTreeMap<i32, RpcValue>) -> bool {
+        if map.len() > 5 {
+            return false;
+        }
+        let tt = map.iter();
+        for (k, v) in map.iter() {
+            match v.value() {
+                Value::List(_) => return false,
+                Value::Map(_) => return false,
+                Value::IMap(_) => return false,
+                _ => continue,
+            }
+        }
+        return true;
+    }
+    fn is_oneliner_meta(map: &MetaMap) -> bool {
+        if map.0.len() > 5 {
+            return false;
+        }
+        for k in map.0.iter() {
+            match k.value.value() {
+                Value::List(_) => return false,
+                Value::Map(_) => return false,
+                Value::IMap(_) => return false,
+                _ => continue,
+            }
+        }
+        return true;
+    }
+
+    fn start_block(&mut self) {
+        self.nest_count += 1;
+    }
+    fn end_block(&mut self, is_oneliner: bool) -> WriteResult {
+        let cnt = self.byte_writer.count();
+        self.nest_count -= 1;
+        if !self.indent.is_empty() {
+            self.indent_element(is_oneliner, true);
+        }
+        Ok(self.byte_writer.count() - cnt)
+    }
+    fn indent_element(&mut self, is_oneliner: bool, is_first_field: bool) -> WriteResult {
+        let cnt = self.byte_writer.count();
+        if !self.indent.is_empty() {
+            if is_oneliner {
+                if !is_first_field {
+                    self.write_byte(b' ')?;
+                }
+            } else {
+                self.write_byte(b'\n')?;
+                for _ in 0 .. self.nest_count {
+                    self.byte_writer.write_bytes(self.indent.as_bytes())?;
+                }
+            }
+        }
+        Ok(self.byte_writer.count() - cnt)
+    }
+    
     fn write_byte(&mut self, b: u8) -> WriteResult {
         self.byte_writer.write_byte(b)
     }
@@ -36,118 +125,121 @@ impl<'a, W> CponWriter<'a, W>
     fn write_int(&mut self, n: i64) -> WriteResult {
         let s = n.to_string();
         let cnt = self.write_bytes(s.as_bytes())?;
-        Ok(cnt)
+                Ok(self.byte_writer.count() - cnt)
     }
     fn write_uint(&mut self, n: u64) -> WriteResult {
         let s = n.to_string();
         let cnt = self.write_bytes(s.as_bytes())?;
-        Ok(cnt)
+                Ok(self.byte_writer.count() - cnt)
     }
     fn write_double(&mut self, n: f64) -> WriteResult {
         let s = format!("{:e}", n);
         let cnt = self.write_bytes(s.as_bytes())?;
-        Ok(cnt)
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_string(&mut self, s: &str) -> WriteResult {
-        let mut cnt: usize = 0;
-        cnt += self.write_byte(b'"')?;
+        let cnt = self.byte_writer.count();
+        self.write_byte(b'"')?;
         let bytes = s.as_bytes();
         for b in bytes {
             match b {
                 0 => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'0')?;
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'0')?;
                 }
                 b'\\' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'\\')?;
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'\\')?;
                 }
                 b'\t' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b't')?;
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b't')?;
                 }
                 b'\r' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'r')?;
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'r')?;
                 }
                 b'\n' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'n')?;
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'n')?;
                 }
                 b'"' => {
-                    cnt += self.write_byte(b'\\')?;
-                    cnt += self.write_byte(b'"')?;
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'"')?;
                 }
                 _ => {
-                    cnt += self.write_byte(*b)?;
+                    self.write_byte(*b)?;
                 }
             }
         }
-        cnt += self.write_byte(b'"')?;
-        Ok(cnt)
+        self.write_byte(b'"')?;
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_decimal(&mut self, decimal: &Decimal) -> WriteResult {
         let s = decimal.to_cpon_string();
         let cnt = self.write_bytes(s.as_bytes())?;
-        return Ok(cnt)
+        return Ok(self.byte_writer.count() - cnt)
     }
     fn write_datetime(&mut self, dt: &DateTime) -> WriteResult {
         let mut cnt = self.write_bytes("d\"".as_bytes())?;
         let s = dt.to_cpon_string();
-        cnt += self.write_bytes(s.as_bytes())?;
-        cnt += self.write_byte(b'"')?;
-        return Ok(cnt)
+        self.write_bytes(s.as_bytes())?;
+        self.write_byte(b'"')?;
+        return Ok(self.byte_writer.count() - cnt)
     }
     fn write_list(&mut self, lst: &Vec<RpcValue>) -> WriteResult {
-        let mut cnt = 0;
-        cnt += self.write_byte(b'[')?;
+        let cnt = self.byte_writer.count();
+        let is_oneliner = Self::is_oneliner_list(lst);
+        self.write_byte(b'[')?;
+        self.start_block();
         let mut n = 0;
         let it = lst.iter();
         for v in it {
-            if n == 0 {
-                n += 1;
-            } else {
-                cnt += self.write_byte(b',')?;
+            if n > 0 {
+                self.write_byte(b',')?;
             }
-            cnt += self.write(v)?;
+            self.indent_element(is_oneliner, n == 0);
+            self.write(v)?;
+            n += 1;
         }
-        cnt += self.write_byte(b']')?;
-        Ok(cnt)
+        self.end_block(is_oneliner);
+        self.write_byte(b']')?;
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_map(&mut self, map: &BTreeMap<String, RpcValue>) -> WriteResult {
-        let mut cnt = 0;
-        cnt += self.write_byte(b'{')?;
+        let cnt = self.byte_writer.count();
+        self.write_byte(b'{')?;
         let mut n = 0;
         for (k, v) in map {
             if n == 0 {
                 n += 1;
             } else {
-                cnt += self.write_byte(b',')?;
+                self.write_byte(b',')?;
             }
-            cnt += self.write_string(k)?;
-            cnt += self.write_byte(b':')?;
-            cnt += self.write(v)?;
+            self.write_string(k)?;
+            self.write_byte(b':')?;
+            self.write(v)?;
         }
-        cnt += self.write_byte(b'}')?;
-        Ok(cnt)
+        self.write_byte(b'}')?;
+        Ok(self.byte_writer.count() - cnt)
     }
     fn write_imap(&mut self, map: &BTreeMap<i32, RpcValue>) -> WriteResult {
-        let mut cnt = 0;
-        cnt += self.write_byte(b'i')?;
-        cnt += self.write_byte(b'{')?;
+        let cnt = self.byte_writer.count();
+        self.write_byte(b'i')?;
+        self.write_byte(b'{')?;
         let mut n = 0;
         for (k, v) in map {
             if n == 0 {
                 n += 1;
             } else {
-                cnt += self.write_byte(b',')?;
+                self.write_byte(b',')?;
             }
-            cnt += self.write_int(*k as i64)?;
-            cnt += self.write_byte(b':')?;
-            cnt += self.write(v)?;
+            self.write_int(*k as i64)?;
+            self.write_byte(b':')?;
+            self.write(v)?;
         }
-        cnt += self.write_byte(b'}')?;
-        Ok(cnt)
+        self.write_byte(b'}')?;
+        Ok(self.byte_writer.count() - cnt)
     }
 }
 
@@ -156,7 +248,7 @@ impl<'a, W> Writer for CponWriter<'a, W>
 {
     fn write(&mut self, val: &RpcValue) -> WriteResult
     {
-        let cnt: usize = self.byte_writer.count();
+        let cnt = self.byte_writer.count();
         let mm = val.meta();
         if !mm.is_empty() {
             self.write_meta(mm)?;

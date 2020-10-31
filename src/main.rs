@@ -1,5 +1,4 @@
 use chainpackrpc::{RpcValue};
-use chainpackrpc::CponReader;
 use log;
 
 fn to_bin(v: &[u8]) -> String {

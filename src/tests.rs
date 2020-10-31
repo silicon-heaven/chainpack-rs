@@ -1,15 +1,13 @@
 use crate::{RpcValue, Decimal};
 use crate::chainpack::PackingSchema;
 use std::mem::size_of;
-use std::sync::Once;
-
-static INIT: Once = Once::new();
 
 /// Setup function that is only run once, even if called multiple times.
 fn init_log() {
-    INIT.call_once(|| {
-        env_logger::init();
-    });
+    let _ = env_logger::builder().is_test(true).try_init();
+    // INIT.call_once(|| {
+    //     env_logger::init();
+    // });
 }
 
 fn from_chainpack(data: &[u8]) -> RpcValue {
