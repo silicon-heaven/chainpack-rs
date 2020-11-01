@@ -63,35 +63,7 @@ impl<'a, W> CponWriter<'a, W>
         };
         return true
     }
-    // fn is_oneliner_map(map: &BTreeMap<String, RpcValue>) -> bool {
-    //     if map.len() > 5 {
-    //         return false;
-    //     }
-    //     for (_, v) in map.iter() {
-    //         match v.value() {
-    //             Value::List(_) => return false,
-    //             Value::Map(_) => return false,
-    //             Value::IMap(_) => return false,
-    //             _ => continue,
-    //         }
-    //     }
-    //     return true;
-    // }
-    // fn is_oneliner_imap(map: &BTreeMap<i32, RpcValue>) -> bool {
-    //     if map.len() > 5 {
-    //         return false;
-    //     }
-    //     let tt = map.iter();
-    //     for (k, v) in map.iter() {
-    //         match v.value() {
-    //             Value::List(_) => return false,
-    //             Value::Map(_) => return false,
-    //             Value::IMap(_) => return false,
-    //             _ => continue,
-    //         }
-    //     }
-    //     return true;
-    // }
+
     fn is_oneliner_meta(map: &MetaMap) -> bool {
         if map.0.len() > 5 {
             return false;

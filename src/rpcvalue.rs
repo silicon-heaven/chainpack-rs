@@ -34,7 +34,7 @@ lazy_static! {
     static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
 }
 
-#[warn(non_camel_case_types)]
+#[allow(non_snake_case)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
 	Null,

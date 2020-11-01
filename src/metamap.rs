@@ -51,10 +51,10 @@ impl MetaMap {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.count() == 0
+        self.len() == 0
     }
 
-    pub fn count(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.0.len()
     }
 
@@ -69,7 +69,8 @@ impl MetaMap {
     }
 
     fn find<I>(&self, key: &I) -> Option<usize>
-        where I: IntoMetaKeyRef {
+        where I: IntoMetaKeyRef
+    {
         let mut ix = 0;
         for kv in self.0.iter() {
             let mk = key.to_metakeyref();
@@ -131,6 +132,26 @@ impl Index<i32> for MetaMap {
         }
     }
 }
+
+pub trait MetaMapValue<'a, Idx: ?Sized> {
+    fn value(&'a self, ix: Idx) -> Option<&'a RpcValue>;
+    fn value_or_default(&'a self, ix: Idx, def_val: &'a RpcValue) -> &'a RpcValue;
+}
+impl<'a> MetaMapValue<'a, i32> for MetaMap {
+    fn value(&self, ix: i32) -> Option<&RpcValue> {
+        match self.find(&ix) {
+            Some(ix) => Some(&self.0[ix].value),
+            None => None,
+        }
+    }
+    fn value_or_default(&'a self, ix: i32, def_val: &'a RpcValue) -> &'a RpcValue {
+        match self.find(&ix) {
+            Some(ix) => &self.0[ix].value,
+            None => def_val,
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod test {
