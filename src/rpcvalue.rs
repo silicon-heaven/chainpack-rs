@@ -34,6 +34,11 @@ lazy_static! {
     static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
 }
 
+pub type Blob = Vec<u8>;
+pub type List = Vec<RpcValue>;
+pub type Map = BTreeMap<String, RpcValue>;
+pub type IMap = BTreeMap<i32, RpcValue>;
+
 #[allow(non_snake_case)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -45,10 +50,10 @@ pub enum Value {
 	DateTime(DateTime),
 	Decimal(Decimal),
 	String(Box<String>),
-	Blob(Box<Vec<u8>>),
-	List(Box<Vec<RpcValue>>),
-	Map(Box<BTreeMap<String, RpcValue>>),
-	IMap(Box<BTreeMap<i32, RpcValue>>),
+	Blob(Box<Blob>),
+	List(Box<List>),
+	Map(Box<Map>),
+	IMap(Box<IMap>),
 }
 
 impl Value {
@@ -162,6 +167,12 @@ impl RpcValue {
 			_ => &EMPTY_METAMAP_REF,
 		}
 	}
+	pub fn meta_mut(&mut self) -> Option<&mut MetaMap> {
+		match &mut self.meta {
+			Some(mm) => Some(mm.as_mut()),
+			_ => None,
+		}
+	}
 	pub fn clear_meta(&mut self) {
 		self.meta = None;
 	}
@@ -174,8 +185,11 @@ impl RpcValue {
 		}
 	}
 
-	pub(crate) fn value(&self) -> &Value {
+	pub fn value(&self) -> &Value {
 		&self.value
+	}
+	pub fn value_mut(&mut self) -> &mut Value {
+		&mut self.value
 	}
 
 	pub fn type_name(&self) -> &'static str {

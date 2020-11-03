@@ -1,5 +1,7 @@
-use crate::{RpcValue, rpctype};
+use crate::{RpcValue, rpctype, Value};
 use crate::metamap::*;
+use std::collections::BTreeMap;
+use crate::rpcvalue::IMap;
 
 pub enum Tag {
     RequestId = rpctype::Tag::USER as isize, // 8
@@ -13,8 +15,8 @@ pub enum Tag {
     UserId,
     MAX
 }
-//
-// pub enum Key {Params = 1, Result, Error, ErrorCode, ErrorMessage, MAX }
+
+pub enum Key {Params = 1, Result, Error, ErrorCode, ErrorMessage, MAX }
 //
 // pub struct MetaType {
 //     ID: i32,
@@ -28,13 +30,18 @@ pub enum Tag {
 //     }
 // }
 
-pub struct RpcMessage (RpcValue);
+pub trait RpcMessage {
+    fn is_request(&self) -> bool;
+    fn is_response(&self) -> bool;
+    fn is_signal(&self) -> bool;
+    fn request_id_mm(meta: &MetaMap) -> Option<i32>;
+    fn request_id(&self) -> Option<i32>;
+    fn method_mm(meta: &MetaMap) -> Option<&str>;
+    fn method(&self) -> Option<&str>;
+}
 
-impl RpcMessage {
-    pub fn new(rv: RpcValue) -> Self {
-        RpcMessage(rv)
-    }
-    pub fn is_request(&self) -> bool {
+impl RpcMessage for RpcValue {
+    fn is_request(&self) -> bool {
         if let Some(_) = self.request_id() {
             if let Some(_) = self.method() {
                 return true;
@@ -42,7 +49,7 @@ impl RpcMessage {
         }
         return false;
     }
-    pub fn is_response(&self) -> bool {
+    fn is_response(&self) -> bool {
         if let Some(_) = self.request_id() {
             if let None = self.method() {
                 return true;
@@ -50,7 +57,7 @@ impl RpcMessage {
         }
         return false;
     }
-    pub fn is_signal(&self) -> bool {
+    fn is_signal(&self) -> bool {
         if let None = self.request_id() {
             if let Some(_) = self.method() {
                 return true;
@@ -58,45 +65,65 @@ impl RpcMessage {
         }
         return false;
     }
-
-    // pub fn isRequest(const ref RpcValue.Meta meta) -> bool {
-    // return hasRequestId(meta) && hasMethod(meta);
-    // }
-    // pub fn isResponse(const ref RpcValue.Meta meta) -> bool {
-    // return hasRequestId(meta) && !hasMethod(meta);
-    // }
-    // pub fn isSignal(const ref RpcValue.Meta meta) -> bool {
-    // return !hasRequestId(meta) && hasMethod(meta);
-    // }
-    //
-    // void setRequestId(ref RpcValue.Meta meta, RpcValue request_id) {
-    // meta[MetaType.Tag.RequestId] = request_id;
-    // }
-    // void setRequestId(RpcValue request_id) {
-    // setRequestId(m_value.meta, request_id);
-    // }
-    // pub fn has_request_id_mm(mm: &MetaMap) -> bool {
-    //     match meta.find(Tag::RequestId as i32) {
-    //         Some(_) => true,
-    //         None => false,
-    //     }
-    // }
-    pub fn request_id_mm(meta: &MetaMap) -> Option<i32> {
+    fn request_id_mm(meta: &MetaMap) -> Option<i32> {
         match meta.value(Tag::RequestId as i32) {
             Some(v) => Some(v.to_i32()),
             None => None,
         }
     }
-    pub fn request_id(&self) -> Option<i32> {
-        return Self::request_id_mm(self.0.meta())
+    fn request_id(&self) -> Option<i32> {
+        return Self::request_id_mm(self.meta())
     }
-    pub fn method_mm(meta: &MetaMap) -> Option<&str> {
+    fn method_mm(meta: &MetaMap) -> Option<&str> {
         match meta.value(Tag::Method as i32) {
             Some(v) => Some(v.to_str()),
             None => None,
         }
     }
-    pub fn method(&self) -> Option<&str> {
-        return Self::method_mm(self.0.meta());
+    fn method(&self) -> Option<&str> {
+        return Self::method_mm(self.meta());
+    }
+}
+
+pub trait RpcRequest {
+    fn new_request(method: &str) -> RpcValue;
+    fn params(&self) -> Option<&RpcValue>;
+    fn set_params(&mut self, rv: RpcValue);
+}
+
+impl RpcRequest for RpcValue {
+    fn new_request(method: &str) -> RpcValue {
+        let mut mm = MetaMap::new();
+        mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
+        mm.insert(Tag::Method as i32, RpcValue::new(method));
+        RpcValue::new_with_meta(IMap::new(), Some(mm))
+    }
+    fn params(&self) -> Option<&RpcValue> {
+        if let Value::IMap(m) = self.value() {
+            let v = m.get(&(Key::Params as i32));
+            return v;
+        }
+        None
+    }
+    fn set_params(&mut self, rv: RpcValue) {
+        if let Value::IMap(m) = self.value_mut() {
+            m.insert(Key::Params as i32, rv);
+        } else {
+            panic!("Not RpcRequest");
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::RpcValue;
+    use crate::RpcRequest;
+
+    #[test]
+    fn rpc_request() {
+        let mut rq = <RpcValue as RpcRequest>::new_request("foo");
+        rq.set_params(RpcValue::new(123));
+        let cpon = rq.to_cpon();
+        assert_eq!(cpon, "<1:1,10:\"foo\">i{1:123}");
     }
 }
