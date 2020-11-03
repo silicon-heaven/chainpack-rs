@@ -2,6 +2,7 @@ use crate::{RpcValue, rpctype, Value};
 use crate::metamap::*;
 use std::collections::BTreeMap;
 use crate::rpcvalue::IMap;
+use std::ops::{Deref, DerefMut};
 
 pub enum Tag {
     RequestId = rpctype::Tag::USER as isize, // 8
@@ -17,30 +18,19 @@ pub enum Tag {
 }
 
 pub enum Key {Params = 1, Result, Error, ErrorCode, ErrorMessage, MAX }
-//
-// pub struct MetaType {
-//     ID: i32,
-// }
 
-// impl MetaType {
-//     pub fn new() -> Self {
-//         MetaType {
-//             ID: rpctype.GlobalNS.MetaTypeID.ChainPackRpcMessage,
-//         }
-//     }
-// }
+pub struct RpcMessage (RpcValue);
+impl RpcMessage {
+    fn new(rv: RpcValue) -> Self {
+        RpcMessage(rv)
+    }
+    fn new_request(method: &str) -> Self {
+        let mut mm = MetaMap::new();
+        mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
+        mm.insert(Tag::Method as i32, RpcValue::new(method));
+        RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(mm)))
+    }
 
-pub trait RpcMessage {
-    fn is_request(&self) -> bool;
-    fn is_response(&self) -> bool;
-    fn is_signal(&self) -> bool;
-    fn request_id_mm(meta: &MetaMap) -> Option<i32>;
-    fn request_id(&self) -> Option<i32>;
-    fn method_mm(meta: &MetaMap) -> Option<&str>;
-    fn method(&self) -> Option<&str>;
-}
-
-impl RpcMessage for RpcValue {
     fn is_request(&self) -> bool {
         if let Some(_) = self.request_id() {
             if let Some(_) = self.method() {
@@ -85,19 +75,24 @@ impl RpcMessage for RpcValue {
     }
 }
 
+impl Deref for RpcMessage {
+    type Target = RpcValue;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl DerefMut for RpcMessage {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 pub trait RpcRequest {
-    fn new_request(method: &str) -> RpcValue;
     fn params(&self) -> Option<&RpcValue>;
     fn set_params(&mut self, rv: RpcValue);
 }
 
-impl RpcRequest for RpcValue {
-    fn new_request(method: &str) -> RpcValue {
-        let mut mm = MetaMap::new();
-        mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
-        mm.insert(Tag::Method as i32, RpcValue::new(method));
-        RpcValue::new_with_meta(IMap::new(), Some(mm))
-    }
+impl RpcRequest for RpcMessage {
     fn params(&self) -> Option<&RpcValue> {
         if let Value::IMap(m) = self.value() {
             let v = m.get(&(Key::Params as i32));
@@ -118,10 +113,11 @@ impl RpcRequest for RpcValue {
 mod test {
     use crate::RpcValue;
     use crate::RpcRequest;
+    use crate::RpcMessage;
 
     #[test]
     fn rpc_request() {
-        let mut rq = <RpcValue as RpcRequest>::new_request("foo");
+        let mut rq = RpcMessage::new_request("foo");
         rq.set_params(RpcValue::new(123));
         let cpon = rq.to_cpon();
         assert_eq!(cpon, "<1:1,10:\"foo\">i{1:123}");
