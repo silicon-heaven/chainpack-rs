@@ -22,6 +22,4 @@ pub use cpon::{CponReader};
 pub use cpon::{CponWriter};
 pub use chainpack::{ChainPackReader, ChainPackWriter};
 
-#[cfg(test)]
-mod tests;
 

@@ -21,7 +21,7 @@ impl<'a> MetaKeyRef<'a> {
     }
 }
 
-pub trait IntoMetaKeyRef {
+pub trait IntoMetaKeyRef: Copy {
     fn to_metakeyref(&self) -> MetaKeyRef;
 }
 impl IntoMetaKeyRef for &str {
@@ -60,15 +60,23 @@ impl MetaMap {
 
     pub fn insert<I>(&mut self, key: I, value: RpcValue) -> &mut Self
         where I: IntoMetaKeyRef {
-        let ix = self.find(&key);
+        let ix = self.find(key);
         match ix {
             None => self.0.push(MetaKeyVal{key: key.to_metakeyref().to_metakey(), value }),
             Some(ix) => self.0[ix].value = value,
         }
         self
     }
+    pub fn remove<I>(&mut self, key: I) -> Option<RpcValue>
+        where I: IntoMetaKeyRef {
+        let ix = self.find(key);
+        match ix {
+            None => None,
+            Some(ix) => Some(self.0.remove(ix).value),
+        }
+    }
 
-    fn find<I>(&self, key: &I) -> Option<usize>
+    fn find<I>(&self, key: I) -> Option<usize>
         where I: IntoMetaKeyRef
     {
         let mut ix = 0;
@@ -113,7 +121,7 @@ impl Index<&str> for MetaMap {
     type Output = RpcValue;
 
     fn index(&self, key: &str) -> &'_ Self::Output {
-        let ix = self.find(&key);
+        let ix = self.find(key);
         match ix {
             Some(ix) => &self.0[ix].value,
             None => panic!("Invalid MetaMap key '{}'", key),
@@ -125,7 +133,7 @@ impl Index<i32> for MetaMap {
     type Output = RpcValue;
 
     fn index(&self, key: i32) -> &'_ Self::Output {
-        let ix = self.find(&key);
+        let ix = self.find(key);
         match ix {
             Some(ix) => &self.0[ix].value,
             None => panic!("Invalid MetaMap key '{}'", key),
@@ -133,10 +141,30 @@ impl Index<i32> for MetaMap {
     }
 }
 
-pub trait MetaMapValue<'a, Idx: ?Sized> {
+pub trait MetaMapValue<'a, Idx>
+    where Idx: IntoMetaKeyRef
+{
     fn value(&'a self, ix: Idx) -> Option<&'a RpcValue>;
     fn value_or_default(&'a self, ix: Idx, def_val: &'a RpcValue) -> &'a RpcValue;
 }
+impl<'a, Idx> MetaMapValue<'a, Idx> for MetaMap
+    where Idx: IntoMetaKeyRef
+{
+    fn value(&self, ix: Idx) -> Option<&RpcValue> {
+        match self.find(ix) {
+            Some(ix) => Some(&self.0[ix].value),
+            None => None,
+        }
+    }
+    fn value_or_default(&'a self, ix: Idx, def_val: &'a RpcValue) -> &'a RpcValue {
+        match self.find(ix) {
+            Some(ix) => &self.0[ix].value,
+            None => def_val,
+        }
+    }
+}
+
+/*
 impl<'a> MetaMapValue<'a, i32> for MetaMap {
     fn value(&self, ix: i32) -> Option<&RpcValue> {
         match self.find(&ix) {
@@ -151,7 +179,21 @@ impl<'a> MetaMapValue<'a, i32> for MetaMap {
         }
     }
 }
-
+impl<'a> MetaMapValue<'a, &str> for MetaMap {
+    fn value(&self, ix: &str) -> Option<&RpcValue> {
+        match self.find(&ix) {
+            Some(ix) => Some(&self.0[ix].value),
+            None => None,
+        }
+    }
+    fn value_or_default(&'a self, ix: &str, def_val: &'a RpcValue) -> &'a RpcValue {
+        match self.find(&ix) {
+            Some(ix) => &self.0[ix].value,
+            None => def_val,
+        }
+    }
+}
+*/
 
 #[cfg(test)]
 mod test {
