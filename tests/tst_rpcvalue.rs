@@ -61,7 +61,7 @@ fn test_cpon_chainpack() {
             //logD(n, cpon, cpk);
             assert_eq!(n.to_string() + "u", cpon);
             assert_eq!(rv_cpon, rv_cpk);
-            assert_eq!(rv_cpk.to_u64(), n);
+            assert_eq!(rv_cpk.as_u64(), n);
         }
     }
     log::info!("------------- tiny int ");
@@ -84,7 +84,7 @@ fn test_cpon_chainpack() {
                 //logD(n, cpon, cpk);
                 assert_eq!(n.to_string(), cpon);
                 assert_eq!(rv_cpon, rv_cpk);
-                assert_eq!(rv_cpk.to_i64(), n);
+                assert_eq!(rv_cpk.as_i64(), n);
             }
         }
     }
@@ -103,9 +103,9 @@ fn test_cpon_chainpack() {
             let rv_cpon = from_cpon(&cpon);
             let rv_cpk = from_chainpack(&cpk);
             assert_eq!(n.to_cpon_string(), cpon);
-            assert_eq!(rv_cpk.to_decimal(), n);
-            let d1 = rv_cpk.to_decimal().to_f64();
-            let d2 = rv_cpon.to_decimal().to_f64();
+            assert_eq!(rv_cpk.as_decimal(), n);
+            let d1 = rv_cpk.as_decimal().to_f64();
+            let d2 = rv_cpon.as_decimal().to_f64();
             assert_eq!(d1, d2);
         }
     }
@@ -121,7 +121,7 @@ fn test_cpon_chainpack() {
             let cpk = to_chainpack(&rv);
             let rv_cpk = from_chainpack(&cpk);
             // log::debug!("\t n: {} cpon: {}", n, cpon);
-            assert_eq!(rv_cpk.to_f64(), n);
+            assert_eq!(rv_cpk.as_f64(), n);
             n += step;
         }
     }
@@ -134,7 +134,7 @@ fn test_cpon_chainpack() {
             let cpk = to_chainpack(&rv);
             let rv_cpk = from_chainpack(&cpk);
             //log::debug!("\t n: {:e} cpon: {}", n, cpon);
-            assert_eq!(rv_cpk.to_f64(), n);
+            assert_eq!(rv_cpk.as_f64(), n);
             n *= step;
         }
     }
@@ -157,7 +157,7 @@ fn test_cpon_chainpack() {
         for cpon in &cpons {
             log::debug!("---> cpon: {}", cpon[0]);
             let rv1 = from_cpon(cpon[0]);
-            log::debug!("\trv: {} epoch: {} offset: {}", &rv1, &rv1.to_datetime().epoch_msec(), &rv1.to_datetime().utc_offset());
+            log::debug!("\trv: {} epoch: {} offset: {}", &rv1, &rv1.as_datetime().epoch_msec(), &rv1.as_datetime().utc_offset());
             let cpk = rv1.to_chainpack();
             let rv2 = from_chainpack(&cpk);
             let cpon2 = rv2.to_cpon();
@@ -184,7 +184,7 @@ fn test_cpon_chainpack() {
             let cpon2 = rv2.to_cpon();
             assert_eq!(cpon2, cpon[1]);
             let rv3 = from_cpon(&cpon2);
-            assert_eq!(rv3.to_str(), cpon[0]);
+            assert_eq!(rv3.as_str(), cpon[0]);
         }
     }
 }

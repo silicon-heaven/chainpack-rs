@@ -206,20 +206,20 @@ mod test {
         let mut mm = MetaMap::new();
 
         mm.insert(123, RpcValue::new(1.1));
-        assert_eq!(mm[123].to_f64(), 1.1);
+        assert_eq!(mm[123].as_f64(), 1.1);
         // let vv = mm.value(1234, Some(&RpcValue::new(123)));
         // println!("inserted and retrieved: {:?}", vv);
         // assert_eq!(123, vv.unwrap().to_i32().unwrap());
 
         mm.insert("foo", RpcValue::new("bar")).insert(123, RpcValue::new("baz"));
-        assert_eq!(mm["foo"].to_str(), "bar");
+        assert_eq!(mm["foo"].as_str(), "bar");
         // println!("val: {:?}", mm[123]);
-        assert_eq!(mm[123].to_str(), "baz");
+        assert_eq!(mm[123].as_str(), "baz");
 
         let v1 = vec![RpcValue::new("foo"), RpcValue::new("bar"), RpcValue::new("baz")];
         let v2 = v1.clone();
         mm.insert("list", RpcValue::new(v1));
-        assert_eq!(mm["list"].to_list(), &v2);
+        assert_eq!(mm["list"].as_list(), &v2);
 
         let mut v1: BTreeMap<i32, RpcValue> = BTreeMap::new();
         v1.insert(1, RpcValue::new("foo"));
@@ -227,7 +227,7 @@ mod test {
         v1.insert(3, RpcValue::new("baz"));
         let v2 = v1.clone();
         mm.insert("imap", RpcValue::new(v1));
-        assert_eq!(mm["imap"].to_imap(), &v2);
+        assert_eq!(mm["imap"].as_imap(), &v2);
 
         let mut v1: BTreeMap<String, RpcValue> = BTreeMap::new();
         v1.insert("a".to_string(), RpcValue::new("foo"));
@@ -235,7 +235,7 @@ mod test {
         v1.insert("c".to_string(), RpcValue::new("baz"));
         let v2 = v1.clone();
         mm.insert("map", RpcValue::new(v1));
-        assert_eq!(mm["map"].to_map(), &v2);
+        assert_eq!(mm["map"].as_map(), &v2);
 
     }
     /*

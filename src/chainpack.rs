@@ -442,7 +442,7 @@ impl<'a, R> ChainPackReader<'a, R>
             let k = self.read()?;
             let key;
             if k.is_string() {
-                key = k.to_str();
+                key = k.as_str();
             }
             else {
                 return Err(self.make_error(&format!("Invalid Map key '{}'", k)))
@@ -463,7 +463,7 @@ impl<'a, R> ChainPackReader<'a, R>
             let k = self.read()?;
             let key;
             if k.is_int() {
-                key = k.to_i32();
+                key = k.as_i32();
             }
             else {
                 return Err(self.make_error(&format!("Invalid IMap key '{}'", k)))

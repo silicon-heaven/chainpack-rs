@@ -726,10 +726,10 @@ impl<'a, R> Reader for CponReader<'a, R>
             self.skip_white_insignificant()?;
             let val = self.read()?;
             if key.is_int() {
-                map.insert(key.to_i32(), val);
+                map.insert(key.as_i32(), val);
             }
             else {
-                map.insert(key.to_str(), val);
+                map.insert(key.as_str(), val);
             }
         }
         Ok(Some(map))
@@ -765,43 +765,43 @@ mod test
     #[test]
     fn test_read() {
         assert_eq!(RpcValue::from_cpon("null").unwrap().is_null(), true);
-        assert_eq!(RpcValue::from_cpon("false").unwrap().to_bool(), false);
-        assert_eq!(RpcValue::from_cpon("true").unwrap().to_bool(), true);
-        assert_eq!(RpcValue::from_cpon("0").unwrap().to_i32(), 0);
-        assert_eq!(RpcValue::from_cpon("123").unwrap().to_i32(), 123);
-        assert_eq!(RpcValue::from_cpon("-123").unwrap().to_i32(), -123);
-        assert_eq!(RpcValue::from_cpon("+123").unwrap().to_i32(), 123);
-        assert_eq!(RpcValue::from_cpon("123u").unwrap().to_u32(), 123u32);
-        assert_eq!(RpcValue::from_cpon("0xFF").unwrap().to_i32(), 255);
-        assert_eq!(RpcValue::from_cpon("-0x1000").unwrap().to_i32(), -4096);
-        assert_eq!(RpcValue::from_cpon("123.4").unwrap().to_decimal(), Decimal::new(1234, -1));
-        assert_eq!(RpcValue::from_cpon("0.123").unwrap().to_decimal(), Decimal::new(123, -3));
-        assert_eq!(RpcValue::from_cpon("-0.123").unwrap().to_decimal(), Decimal::new(-123, -3));
-        assert_eq!(RpcValue::from_cpon("0e0").unwrap().to_decimal(), Decimal::new(0, 0));
-        assert_eq!(RpcValue::from_cpon("0.123e3").unwrap().to_decimal(), Decimal::new(123, 0));
-        assert_eq!(RpcValue::from_cpon("1000000.").unwrap().to_decimal(), Decimal::new(1000000, 0));
-        assert_eq!(RpcValue::from_cpon(r#""foo""#).unwrap().to_str(), "foo");
-        assert_eq!(RpcValue::from_cpon(r#""ěščřžýáí""#).unwrap().to_str(), "ěščřžýáí");
-        assert_eq!(RpcValue::from_cpon("\"foo\tbar\nbaz\"").unwrap().to_str(), "foo\tbar\nbaz");
-        assert_eq!(RpcValue::from_cpon(r#""foo\"bar""#).unwrap().to_str(), r#"foo"bar"#);
+        assert_eq!(RpcValue::from_cpon("false").unwrap().as_bool(), false);
+        assert_eq!(RpcValue::from_cpon("true").unwrap().as_bool(), true);
+        assert_eq!(RpcValue::from_cpon("0").unwrap().as_i32(), 0);
+        assert_eq!(RpcValue::from_cpon("123").unwrap().as_i32(), 123);
+        assert_eq!(RpcValue::from_cpon("-123").unwrap().as_i32(), -123);
+        assert_eq!(RpcValue::from_cpon("+123").unwrap().as_i32(), 123);
+        assert_eq!(RpcValue::from_cpon("123u").unwrap().as_u32(), 123u32);
+        assert_eq!(RpcValue::from_cpon("0xFF").unwrap().as_i32(), 255);
+        assert_eq!(RpcValue::from_cpon("-0x1000").unwrap().as_i32(), -4096);
+        assert_eq!(RpcValue::from_cpon("123.4").unwrap().as_decimal(), Decimal::new(1234, -1));
+        assert_eq!(RpcValue::from_cpon("0.123").unwrap().as_decimal(), Decimal::new(123, -3));
+        assert_eq!(RpcValue::from_cpon("-0.123").unwrap().as_decimal(), Decimal::new(-123, -3));
+        assert_eq!(RpcValue::from_cpon("0e0").unwrap().as_decimal(), Decimal::new(0, 0));
+        assert_eq!(RpcValue::from_cpon("0.123e3").unwrap().as_decimal(), Decimal::new(123, 0));
+        assert_eq!(RpcValue::from_cpon("1000000.").unwrap().as_decimal(), Decimal::new(1000000, 0));
+        assert_eq!(RpcValue::from_cpon(r#""foo""#).unwrap().as_str(), "foo");
+        assert_eq!(RpcValue::from_cpon(r#""ěščřžýáí""#).unwrap().as_str(), "ěščřžýáí");
+        assert_eq!(RpcValue::from_cpon("\"foo\tbar\nbaz\"").unwrap().as_str(), "foo\tbar\nbaz");
+        assert_eq!(RpcValue::from_cpon(r#""foo\"bar""#).unwrap().as_str(), r#"foo"bar"#);
 
         let lst1 = vec![RpcValue::new(123), RpcValue::new("foo")];
         let cpon = r#"[123 , "foo"]"#;
         let rv = RpcValue::from_cpon(cpon).unwrap();
-        let lst2 = rv.to_list();
+        let lst2 = rv.as_list();
         assert_eq!(lst2, &lst1);
 
         let mut map: BTreeMap<String, RpcValue> = BTreeMap::new();
         map.insert("foo".to_string(), RpcValue::new(123));
         map.insert("bar".to_string(), RpcValue::new("baz"));
         let cpon = r#"{"foo": 123,"bar":"baz"}"#;
-        assert_eq!(RpcValue::from_cpon(cpon).unwrap().to_map(), &map);
+        assert_eq!(RpcValue::from_cpon(cpon).unwrap().as_map(), &map);
 
         let mut map: BTreeMap<i32, RpcValue> = BTreeMap::new();
         map.insert(1, RpcValue::new(123));
         map.insert(2, RpcValue::new("baz"));
         let cpon = r#"i{1: 123,2:"baz"}"#;
-        assert_eq!(RpcValue::from_cpon(cpon).unwrap().to_imap(), &map);
+        assert_eq!(RpcValue::from_cpon(cpon).unwrap().as_imap(), &map);
 
         let cpon = r#"<1: 123,2:"baz">"#;
         let mut b = cpon.as_bytes();

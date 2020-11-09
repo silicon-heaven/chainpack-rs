@@ -215,69 +215,69 @@ impl RpcValue {
 		}
 	}
 
-	pub fn to_bool(&self) -> bool {
+	pub fn as_bool(&self) -> bool {
 		match &self.value {
 			Value::Bool(d) => *d,
 			_ => false,
 		}
 	}
-	pub fn to_i64(&self) -> i64 {
+	pub fn as_i64(&self) -> i64 {
 		match &self.value {
 			Value::Int(d) => *d,
 			_ => 0,
 		}
 	}
-	pub fn to_i32(&self) -> i32 { self.to_i64() as i32 }
-	pub fn to_u64(&self) -> u64 {
+	pub fn as_i32(&self) -> i32 { self.as_i64() as i32 }
+	pub fn as_u64(&self) -> u64 {
 		match &self.value {
 			Value::UInt(d) => *d,
 			_ => 0,
 		}
 	}
-	pub fn to_u32(&self) -> u32 { self.to_u64() as u32 }
-	pub fn to_f64(&self) -> f64 {
+	pub fn as_u32(&self) -> u32 { self.as_u64() as u32 }
+	pub fn as_f64(&self) -> f64 {
 		match &self.value {
 			Value::Double(d) => *d,
 			_ => 0.,
 		}
 	}
-	pub fn to_datetime(&self) -> DateTime {
+	pub fn as_datetime(&self) -> DateTime {
 		match &self.value {
 			Value::DateTime(d) => d.clone(),
 			_ => DateTime::invalid(),
 		}
 	}
-	pub fn to_decimal(&self) -> Decimal {
+	pub fn as_decimal(&self) -> Decimal {
 		match &self.value {
 			Value::Decimal(d) => d.clone(),
 			_ => Decimal::new(0, 0),
 		}
 	}
-	pub fn to_str(&self) -> &str {
+	pub fn as_str(&self) -> &str {
 		match &self.value {
 			Value::String(b) => b,
 			_ => EMPTY_STR_REF,
 		}
 	}
-	pub fn to_blob(&self) -> &[u8] {
+	pub fn as_blob(&self) -> &[u8] {
 		match &self.value {
 			Value::Blob(b) => b,
 			_ => EMPTY_BLOB_REF,
 		}
 	}
-	pub fn to_list(&self) -> &Vec<RpcValue> {
+	pub fn as_list(&self) -> &Vec<RpcValue> {
 		match &self.value {
 			Value::List(b) => &b,
 			_ => &EMPTY_LIST_REF,
 		}
 	}
-	pub fn to_map(&self) -> &BTreeMap<String, RpcValue> {
+	pub fn as_map(&self) -> &BTreeMap<String, RpcValue> {
 		match &self.value {
 			Value::Map(b) => &b,
 			_ => &EMPTY_MAP_REF,
 		}
 	}
-	pub fn to_imap(&self) -> &BTreeMap<i32, RpcValue> {
+	pub fn as_imap(&self) -> &BTreeMap<i32, RpcValue> {
 		match &self.value {
 			Value::IMap(b) => &b,
 			_ => &EMPTY_IMAP_REF,
@@ -370,48 +370,48 @@ mod test {
 	fn rpcval_new()
 	{
 		let rv = RpcValue::new(true);
-		assert_eq!(rv.to_bool(), true);
+		assert_eq!(rv.as_bool(), true);
 		let rv = RpcValue::new("foo");
-		assert_eq!(rv.to_str(), "foo");
+		assert_eq!(rv.as_str(), "foo");
 		let rv = RpcValue::new(&"bar".to_string());
-		assert_eq!(rv.to_str(), "bar");
+		assert_eq!(rv.as_str(), "bar");
 		let rv = RpcValue::new(123);
-		assert_eq!(rv.to_i32(), 123);
+		assert_eq!(rv.as_i32(), 123);
 		let rv = RpcValue::new(12.3);
-		assert_eq!(rv.to_f64(), 12.3);
+		assert_eq!(rv.as_f64(), 12.3);
 
 		let dt = DateTime::now();
 		let rv = RpcValue::new(dt.clone());
-		assert_eq!(rv.to_datetime(), dt);
+		assert_eq!(rv.as_datetime(), dt);
 
 		let dc = Decimal::new(123, -1);
 		let rv = RpcValue::new(dc.clone());
-		assert_eq!(rv.to_decimal(), dc);
+		assert_eq!(rv.as_decimal(), dc);
 
 		let dt = chrono::offset::Utc::now();
 		let rv = RpcValue::new(dt.clone());
-		assert_eq!(rv.to_datetime().epoch_msec(), dt.timestamp_millis());
+		assert_eq!(rv.as_datetime().epoch_msec(), dt.timestamp_millis());
 
 		let dt = chrono::offset::Local::now();
 		let rv = RpcValue::new(dt.clone());
-		assert_eq!(rv.to_datetime().epoch_msec() + rv.to_datetime().utc_offset() as i64 * 1000
+		assert_eq!(rv.as_datetime().epoch_msec() + rv.as_datetime().utc_offset() as i64 * 1000
 				   , dt.timestamp_millis() + dt.offset().fix().local_minus_utc() as i64 * 1000);
 
 		let vec1 = vec![RpcValue::new(123), RpcValue::new("foo")];
 		let rv = RpcValue::new(vec1.clone());
-		assert_eq!(rv.to_list(), &vec1);
+		assert_eq!(rv.as_list(), &vec1);
 
 		let mut m: BTreeMap<String, RpcValue> = BTreeMap::new();
 		m.insert("foo".to_string(), RpcValue::new(123));
 		m.insert("bar".to_string(), RpcValue::new("foo"));
 		let rv = RpcValue::new(m.clone());
-		assert_eq!(rv.to_map(), &m);
+		assert_eq!(rv.as_map(), &m);
 
 		let mut m: BTreeMap<i32, RpcValue> = BTreeMap::new();
 		m.insert(1, RpcValue::new(123));
 		m.insert(2, RpcValue::new("foo"));
 		let rv = RpcValue::new(m.clone());
-		assert_eq!(rv.to_imap(), &m);
+		assert_eq!(rv.as_imap(), &m);
 	}
 
 }

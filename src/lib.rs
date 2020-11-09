@@ -11,7 +11,7 @@ mod cpon;
 mod chainpack;
 
 pub use rpcvalue::{RpcValue};
-pub use rpcmessage::{RpcMessage, RpcRequest};
+pub use rpcmessage::{RpcMessage};
 pub use rpcvalue::{Value};
 pub use datetime::{DateTime};
 pub use decimal::{Decimal};
