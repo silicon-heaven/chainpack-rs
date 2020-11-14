@@ -49,15 +49,12 @@ impl MetaMap {
     pub fn new() -> MetaMap {
         MetaMap(Vec::new())
     }
-
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-
     pub fn len(&self) -> usize {
         self.0.len()
     }
-
     pub fn insert<I>(&mut self, key: I, value: RpcValue) -> &mut Self
         where I: IntoMetaKeyRef {
         let ix = self.find(key);
@@ -73,6 +70,22 @@ impl MetaMap {
         match ix {
             None => None,
             Some(ix) => Some(self.0.remove(ix).value),
+        }
+    }
+    pub fn value<Idx>(&self, ix: Idx) -> Option<&RpcValue>
+        where Idx: IntoMetaKeyRef
+    {
+        match self.find(ix) {
+            Some(ix) => Some(&self.0[ix].value),
+            None => None,
+        }
+    }
+    pub fn value_or_default<'a, Idx>(&'a self, ix: Idx, def_val: &'a RpcValue) -> &'a RpcValue
+        where Idx: IntoMetaKeyRef
+    {
+        match self.find(ix) {
+            Some(ix) => &self.0[ix].value,
+            None => def_val,
         }
     }
 
@@ -100,15 +113,6 @@ impl MetaMap {
         }
         None
     }
-
-    // pub fn value<'a, I>(&'a self, key: I, def_val: Option<&'a RpcValue>) -> Option<&'a RpcValue>
-    //     where I: IntoMetaKeyRef {
-    //     let ix = self.find(&key);
-    //     match ix {
-    //         Some(ix) => Some(&self.0[ix].value),
-    //         None => def_val
-    //     }
-    // }
 }
 
 impl fmt::Debug for MetaMap {
@@ -140,60 +144,6 @@ impl Index<i32> for MetaMap {
         }
     }
 }
-
-pub trait MetaMapValue<'a, Idx>
-    where Idx: IntoMetaKeyRef
-{
-    fn value(&'a self, ix: Idx) -> Option<&'a RpcValue>;
-    fn value_or_default(&'a self, ix: Idx, def_val: &'a RpcValue) -> &'a RpcValue;
-}
-impl<'a, Idx> MetaMapValue<'a, Idx> for MetaMap
-    where Idx: IntoMetaKeyRef
-{
-    fn value(&self, ix: Idx) -> Option<&RpcValue> {
-        match self.find(ix) {
-            Some(ix) => Some(&self.0[ix].value),
-            None => None,
-        }
-    }
-    fn value_or_default(&'a self, ix: Idx, def_val: &'a RpcValue) -> &'a RpcValue {
-        match self.find(ix) {
-            Some(ix) => &self.0[ix].value,
-            None => def_val,
-        }
-    }
-}
-
-/*
-impl<'a> MetaMapValue<'a, i32> for MetaMap {
-    fn value(&self, ix: i32) -> Option<&RpcValue> {
-        match self.find(&ix) {
-            Some(ix) => Some(&self.0[ix].value),
-            None => None,
-        }
-    }
-    fn value_or_default(&'a self, ix: i32, def_val: &'a RpcValue) -> &'a RpcValue {
-        match self.find(&ix) {
-            Some(ix) => &self.0[ix].value,
-            None => def_val,
-        }
-    }
-}
-impl<'a> MetaMapValue<'a, &str> for MetaMap {
-    fn value(&self, ix: &str) -> Option<&RpcValue> {
-        match self.find(&ix) {
-            Some(ix) => Some(&self.0[ix].value),
-            None => None,
-        }
-    }
-    fn value_or_default(&'a self, ix: &str, def_val: &'a RpcValue) -> &'a RpcValue {
-        match self.find(&ix) {
-            Some(ix) => &self.0[ix].value,
-            None => def_val,
-        }
-    }
-}
-*/
 
 #[cfg(test)]
 mod test {

@@ -1,17 +1,22 @@
 use crate::{RpcValue, rpctype, Value};
 use crate::metamap::*;
-use std::collections::BTreeMap;
-use crate::rpcvalue::IMap;
-use std::ops::{Deref, DerefMut};
+// use std::collections::BTreeMap;
+use crate::rpcvalue::{IMap, List};
+// use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{AtomicI64, Ordering};
+
+static G_RPC_REQUEST_COUNT: AtomicI64 = AtomicI64::new(0);
 
 pub type RqId = i64;
+pub type CliId = i32;
 
+#[allow(dead_code)]
 pub enum Tag {
     RequestId = rpctype::Tag::USER as isize, // 8
     ShvPath, // 9
     Method,  // 10
     CallerIds, // 11
-    ProtocolType, //needed when dest client is using different version than source one to translate raw message data to correct format
+    ProtocolType, //needed when destination client is using different version than source one to translate raw message data to correct format
     RevCallerIds,
     AccessGrant,
     TunnelCtl,
@@ -19,7 +24,10 @@ pub enum Tag {
     MAX
 }
 
+#[allow(dead_code)]
 pub enum Key {Params = 1, Result, Error, ErrorCode, ErrorMessage, MAX }
+
+//pub type RpcMessageResult = Result<RpcMessage, &str>;
 
 pub struct RpcMessage (RpcValue);
 impl RpcMessage {
@@ -29,12 +37,47 @@ impl RpcMessage {
         //mm.insert(Tag::Method as i32, RpcValue::new(method));
         RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(mm)))
     }
-    fn from_rpcvalue(rv: RpcValue) -> Self {
-        RpcMessage(rv)
+    fn new_request(method: &str) -> Self {
+        Self::new_request_with_id(Self::next_request_id(), method)
+    }
+    fn new_request_with_id(rq_id: RqId, method: &str) -> Self {
+        let mut msg = Self::new();
+        msg.set_request_id(rq_id);
+        msg.set_method(method);
+        //if let Some(rv) = params {
+        //    msg.set_params(rv);
+        //}
+        msg
+    }
+    fn create_response(&self) -> Result<RpcMessage, &str> {
+        if self.is_request() {
+            if let Some(rqid) = self.request_id() {
+                let mut msg = RpcMessage::new();
+                msg.set_request_id(rqid);
+                msg.set_caller_ids(&self.caller_ids());
+                return Ok(msg)
+            }
+            return Err("Request ID is missing")
+        }
+        Err("Not RPC Request")
     }
 
+    fn from_rpcvalue(rv: RpcValue) -> Result<Self, &'static str> {
+        if !rv.has_meta() {
+            return Err("Not RpcMessage")
+        }
+        if !rv.is_imap() {
+            return Err("Not RpcMessage")
+        }
+        Ok(RpcMessage(rv))
+    }
     fn as_rpcvalue(&self) -> &RpcValue {
         return &self.0
+    }
+
+    pub fn next_request_id() -> RqId {
+        let old_id = G_RPC_REQUEST_COUNT.fetch_add(1, Ordering::SeqCst);
+        old_id + 1
     }
 
     fn is_request(&self) -> bool {
@@ -83,21 +126,17 @@ impl RpcMessage {
     pub fn set_params(&mut self, rv: RpcValue) -> &mut Self  { self.set_key(Key::Params, Some(rv));self }
     pub fn result(&self) -> Option<&RpcValue> { self.key(Key::Result as i32) }
     pub fn set_result(&mut self, rv: RpcValue) -> &mut Self { self.set_key(Key::Result, Some(rv));self }
+    pub fn error(&self) -> Option<RpcError> {
+        if let Some(rv) = self.key(Key::Error as i32) {
+            return RpcError::from_rpcvalue(rv)
+        }
+        None
+    }
+    pub fn set_error(&mut self, err: RpcError) -> &mut Self {
+        self.set_key(Key::Result, Some(err.to_rpcvalue()));
+        self
+    }
 
-    // fn tag_mm<Idx>(meta: &MetaMap, key: Idx) -> Option<&RpcValue>
-    //     where Idx: IntoMetaKeyRef
-    // {
-    //     meta.value(key)
-    // }
-    // fn set_tag_mm<Idx>(meta: &mut MetaMap, key: Idx, rv: Option<RpcValue>) -> &mut MetaMap
-    //     where Idx: IntoMetaKeyRef
-    // {
-    //     match rv {
-    //         Some(rv) => { meta.insert(key, rv); },
-    //         None => { meta.remove(key); },
-    //     };
-    //     meta
-    // }
     fn tag<Idx>(&self, key: Idx) -> Option<&RpcValue>
         where Idx: IntoMetaKeyRef
     {
@@ -113,7 +152,7 @@ impl RpcMessage {
             };
             self
         } else {
-            panic!("Not RpcMessage");
+            panic!("Not RpcMessage")
         }
     }
     fn key(&self, key: i32) -> Option<&RpcValue> {
@@ -131,7 +170,7 @@ impl RpcMessage {
             };
             self
         } else {
-            panic!("Not RpcMessage");
+            panic!("Not RpcMessage")
         }
     }
 
@@ -151,34 +190,8 @@ impl DerefMut for RpcMessage {
 */
 pub trait RpcMessageMeta {
     type Target;
-    // fn new(method: &str, params: Option<RpcValue>) -> RpcMessage;
-    fn request_id(&self) -> Option<RqId>;
-    fn set_request_id(&mut self, id: RqId) -> &mut Self::Target;
-    fn method(&self) -> Option<&str>;
-    fn set_method(&mut self, method: &str) -> &mut Self::Target;
-}
-impl RpcMessageMeta for RpcMessage {
-    type Target = RpcMessage;
-
-    // fn new(method: &str, params: Option<RpcValue>) -> Self {
-    //     let mut msg = Self::new();
-    //     msg.set_method(method);
-    //     if let Some(rv) = params {
-    //          msg.set_params(rv);
-    //     }
-    //     msg
-    // }
-    // fn method(&self) -> Option<&> {
-    //     match Self::tag_mm(meta, Tag::Method as i32) {
-    //         None => None,
-    //         Some(rv) => rv.to_str()
-    //     }
-    // }
-    // fn set_method_mm(meta: &mut MetaMap, method: &str) -> &mut MetaMap {
-    //     Self::set_tag_mm(meta, Tag::Method as i32, Some(RpcValue::new(method)));
-    //     meta
-    // }
-
+    fn tag(&self, id: i32) -> Option<&RpcValue>;
+    fn set_tag(&mut self, id: i32, val: Option<RpcValue>) -> &mut Self::Target;
 
     fn request_id(&self) -> Option<RqId> {
         let t = self.tag(Tag::RequestId as i32);
@@ -188,8 +201,7 @@ impl RpcMessageMeta for RpcMessage {
         }
     }
     fn set_request_id(&mut self, id: RqId) -> &mut Self::Target {
-        self.set_tag(Tag::RequestId as i32, Some(RpcValue::new(id)));
-        self
+        self.set_tag(Tag::RequestId as i32, Some(RpcValue::new(id)))
     }
     fn method(&self) -> Option<&str> {
         let t = self.tag(Tag::Method as i32);
@@ -198,11 +210,85 @@ impl RpcMessageMeta for RpcMessage {
             Some(rv) => Some(rv.as_str()),
         }
     }
-    fn set_method(&mut self, method: &str) -> &mut Self {
-        self.set_tag(Tag::Method as i32, Some(RpcValue::new(method)));
-        self
+    fn set_method(&mut self, method: &str) -> &mut Self::Target {
+        self.set_tag(Tag::Method as i32, Some(RpcValue::new(method)))
     }
 
+    fn caller_ids(&self) -> Vec<CliId> {
+        let t = self.tag(Tag::CallerIds as i32);
+        match t {
+            None => Vec::new(),
+            Some(rv) => {
+                if rv.is_int() {
+                    return vec![rv.as_int() as CliId];
+                }
+                if rv.is_list() {
+                    return rv.as_list().into_iter().map(|v| v.as_int() as CliId).collect();
+                }
+                return Vec::new()
+            },
+        }
+    }
+
+    fn set_caller_ids(&mut self, ids: &Vec<CliId>) -> &mut Self::Target {
+        if ids.len() == 0 {
+            return self.set_tag(Tag::CallerIds as i32, None);
+        }
+        if ids.len() == 1 {
+            return self.set_tag(Tag::CallerIds as i32, Some(RpcValue::new(ids[0] as CliId)));
+        }
+        let lst: List = ids.into_iter().map(|v| RpcValue::new(*v)).collect();
+        return self.set_tag(Tag::CallerIds as i32, Some(RpcValue::new(lst)));
+    }
+
+    fn push_caller_id(&mut self, id: CliId) -> &mut Self::Target {
+        let mut ids = self.caller_ids();
+        ids.push(id as CliId);
+        self.set_caller_ids(&ids)
+    }
+    fn pop_caller_id(&mut self) -> Option<CliId> {
+        let mut ids = self.caller_ids();
+        let id = ids.pop();
+        match id {
+            Some(id) => {
+                self.set_caller_ids(&ids);
+                Some(id)
+            }
+            None => {
+                None
+            }
+        }
+    }
+}
+impl RpcMessageMeta for RpcMessage {
+    type Target = RpcMessage;
+
+    fn tag(&self, id: i32) -> Option<&RpcValue> {
+        self.tag(id)
+    }
+    fn set_tag(&mut self, id: i32, val: Option<RpcValue>) -> &mut Self::Target {
+        self.set_tag(id, val)
+    }
+}
+
+impl RpcMessageMeta for MetaMap {
+    type Target = MetaMap;
+
+    fn tag(&self, id: i32) -> Option<&RpcValue> {
+        self.value(id)
+    }
+    fn set_tag(&mut self, id: i32, val: Option<RpcValue>) -> &mut Self::Target {
+        match val {
+            Some(rv) => {
+                self.insert(id, rv);
+                self
+            }
+            None => {
+                self.remove(id);
+                self
+            }
+        }
+    }
 }
 
 pub enum RpcErrorCode {
@@ -218,34 +304,26 @@ pub enum RpcErrorCode {
     Unknown,
     UserCode = 32
 }
-pub trait RpcError {
-    fn new(code: RpcErrorCode, msg: &str) -> Self;
-    //fn to_rpcvalue(&self) -> RpcValue;
-}
+pub struct RpcError(IMap);
 
-impl RpcError for IMap {
-    fn new(code: RpcErrorCode, msg: &str) -> Self {
+impl RpcError {
+    pub fn new(code: RpcErrorCode, msg: &str) -> Self {
         enum Key {KeyCode = 1, KeyMessage};
         let mut m = IMap::new();
         m.insert(Key::KeyCode as i32, RpcValue::new(code as i64));
         if msg.len() > 0 {
             m.insert(Key::KeyMessage as i32, RpcValue::new(msg.to_string()));
         }
-        m
+        RpcError(m)
     }
-}
-pub trait RpcResponse {
-    fn new(result: RpcValue) -> RpcMessage;
-    fn new_error(err: impl RpcError) -> RpcMessage;
-}
-impl RpcResponse for RpcMessage {
-    fn new(result: RpcValue) -> RpcMessage {
-        let mut msg = RpcMessage::new();
-        msg.set_result(result);
-        msg
+    pub fn from_rpcvalue(rv: &RpcValue) -> Option<Self> {
+        if rv.is_imap() {
+            return Some(RpcError(rv.as_imap().clone()))
+        }
+        None
     }
-    fn new_error(err: impl RpcError) -> RpcMessage {
-        unimplemented!()
+    pub fn to_rpcvalue(&self) -> RpcValue {
+        RpcValue::new(self.0.clone())
     }
 }
 
@@ -253,12 +331,32 @@ impl RpcResponse for RpcMessage {
 mod test {
     use crate::RpcValue;
     use crate::RpcMessage;
+    use crate::rpcmessage::RpcMessageMeta;
 
     #[test]
     fn rpc_request() {
-        // let mut rq = RpcMessage::new_request("foo");
-        // rq.set_params(RpcValue::new(123));
-        // let cpon = rq.as_rpcvalue().to_cpon();
-        // assert_eq!(cpon, "<1:1,10:\"foo\">i{1:123}");
+        let id = RpcMessage::next_request_id();
+        let mut rq = RpcMessage::new_request_with_id(id, "foo");
+        let params = RpcValue::new(123);
+        rq.set_params(params.clone());
+        assert_eq!(rq.params(), Some(&params));
+        let caller_ids = vec![1,2,3];
+        rq.set_caller_ids(&caller_ids);
+        assert_eq!(&rq.caller_ids(), &caller_ids);
+        let id = rq.pop_caller_id();
+        assert_eq!(id, Some(3));
+        assert_eq!(rq.caller_ids(), vec![1,2]);
+        let id = rq.pop_caller_id();
+        assert_eq!(id, Some(2));
+        let id = rq.pop_caller_id();
+        assert_eq!(id, Some(1));
+        let id = rq.pop_caller_id();
+        assert_eq!(id, None);
+        rq.push_caller_id(4);
+        let mut resp = rq.create_response().unwrap();
+        assert_eq!(&resp.caller_ids(), &vec![4]);
+        assert_eq!(resp.pop_caller_id(), Some(4));
+        //let cpon = rq.as_rpcvalue().to_cpon();
+        //assert_eq!(cpon, format!("<1:1,8:{},10:\"foo\">i{{1:123}}", id + 1));
     }
 }

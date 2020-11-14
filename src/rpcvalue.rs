@@ -89,6 +89,8 @@ impl FromValue for Vec<u8> { fn chainpack_make_value(self) -> Value { Value::Blo
 impl FromValue for &[u8] { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self.to_vec())) } }
 impl FromValue for &String { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.clone())) } }
 impl FromValue for i32 { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
+impl FromValue for u32 { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
+impl FromValue for isize { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for usize { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
 	fn chainpack_make_value(self) -> Value {
@@ -112,7 +114,9 @@ macro_rules! from_value {
 }
 
 from_value!(bool, Bool);
+//from_value!(i32, Int);
 from_value!(i64, Int);
+//from_value!(u32, UInt);
 from_value!(u64, UInt);
 from_value!(f64, Double);
 from_value!(DateTime, DateTime);
@@ -133,6 +137,17 @@ from_value_box!(Vec<RpcValue>, List);
 from_value_box!(BTreeMap<String, RpcValue>, Map);
 from_value_box!(BTreeMap<i32, RpcValue>, IMap);
 
+macro_rules! is_xxx {
+    ($name:ident, $variant:pat) => {
+        pub fn $name(&self) -> bool {
+            match self.value() {
+                $variant => true,
+                _ => false,
+            }
+        }
+    };
+}
+
 #[derive(PartialEq, Clone)]
 pub struct RpcValue {
 	meta: Option<Box<MetaMap>>,
@@ -140,6 +155,12 @@ pub struct RpcValue {
 }
 
 impl RpcValue {
+	pub fn default() -> RpcValue {
+		RpcValue {
+			meta: None,
+			value: Value::Null,
+		}
+	}
 	pub fn new<I>(val: I) -> RpcValue
 		where I: FromValue
 	{
@@ -161,6 +182,12 @@ impl RpcValue {
 		}
 	}
 
+	pub fn has_meta(&self) -> bool {
+		match &self.meta {
+			Some(_) => true,
+			_ => false,
+		}
+	}
 	pub fn meta(&self) -> &MetaMap {
 		match &self.meta {
 			Some(mm) => mm,
@@ -196,30 +223,22 @@ impl RpcValue {
 		&self.value.type_name()
 	}
 
-	pub fn is_null(&self) -> bool {
-		match &self.value {
-			Value::Null => true,
-			_ => false,
-		}
-	}
-	pub fn is_int(&self) -> bool {
-		match &self.value {
-			Value::Int(_) => true,
-			_ => false,
-		}
-	}
-	pub fn is_string(&self) -> bool {
-		match &self.value {
-			Value::String(_) => true,
-			_ => false,
-		}
-	}
+	is_xxx!(is_null, Value::Null);
+	is_xxx!(is_bool, Value::Bool(_));
+	is_xxx!(is_int, Value::Int(_));
+	is_xxx!(is_string, Value::String(_));
+	is_xxx!(is_list, Value::List(_));
+	is_xxx!(is_map, Value::Map(_));
+	is_xxx!(is_imap, Value::IMap(_));
 
 	pub fn as_bool(&self) -> bool {
 		match &self.value {
 			Value::Bool(d) => *d,
 			_ => false,
 		}
+	}
+	pub fn as_int(&self) -> i64 {
+		return self.as_i64()
 	}
 	pub fn as_i64(&self) -> i64 {
 		match &self.value {

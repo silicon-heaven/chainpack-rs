@@ -1,10 +1,11 @@
+#[allow(dead_code)]
 pub enum Tag {
-    Invalid = -1,
     MetaTypeId = 1,
     MetaTypeNameSpaceId,
     USER = 8
 }
 
+#[allow(dead_code)]
 pub enum NameSpaceID
 {
     Global = 0,
@@ -15,6 +16,7 @@ pub enum NameSpaceID
 #[allow(non_snake_case)]
 pub mod GlobalNS
 {
+    #[allow(dead_code)]
     pub enum MetaTypeID
     {
         ChainPackRpcMessage = 1,
