@@ -1,9 +1,9 @@
 use clap::{Arg, App};
 use std::{process, io, fs};
 use std::io::{BufReader, BufRead, BufWriter, stdout};
-use chainpackrpc::{CponReader, ChainPackReader, ChainPackWriter, CponWriter};
-use chainpackrpc::Reader;
-use chainpackrpc::Writer;
+use chainpack::{CponReader, ChainPackReader, ChainPackWriter, CponWriter};
+use chainpack::Reader;
+use chainpack::Writer;
 use env_logger::{WriteStyle};
 use chrono::Local;
 use std::io::Write;

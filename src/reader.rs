@@ -4,9 +4,9 @@ use crate::rpcvalue::Value;
 
 #[derive(Debug)]
 pub struct ReadError {
-    msg: String,
-    line: usize,
-    col: usize,
+    pub msg: String,
+    pub line: usize,
+    pub col: usize,
 }
 //impl ReadError {
 //    fn new(msg: String, line: usize, col: usize) -> ReadError {

@@ -352,7 +352,7 @@ impl<'a, R> ChainPackReader<'a, R>
         }
         Ok((num, bitlen))
     }
-    fn read_uint_data(&mut self) -> Result<u64, ReadError> {
+    pub fn read_uint_data(&mut self) -> Result<u64, ReadError> {
         let (num, _) = self.read_uint_data_helper()?;
         return Ok(num);
     }

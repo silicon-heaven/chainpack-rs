@@ -4,6 +4,7 @@ use crate::metamap::*;
 use crate::rpcvalue::{IMap, List};
 // use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicI64, Ordering};
+use std::fmt;
 
 static G_RPC_REQUEST_COUNT: AtomicI64 = AtomicI64::new(0);
 
@@ -29,18 +30,19 @@ pub enum Key {Params = 1, Result, Error, ErrorCode, ErrorMessage, MAX }
 
 //pub type RpcMessageResult = Result<RpcMessage, &str>;
 
+#[derive(Clone, Debug)]
 pub struct RpcMessage (RpcValue);
 impl RpcMessage {
-    fn new() -> Self {
+    pub fn new() -> Self {
         let mut mm = MetaMap::new();
         mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
         //mm.insert(Tag::Method as i32, RpcValue::new(method));
         RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(mm)))
     }
-    fn new_request(method: &str) -> Self {
+    pub fn new_request(method: &str) -> Self {
         Self::new_request_with_id(Self::next_request_id(), method)
     }
-    fn new_request_with_id(rq_id: RqId, method: &str) -> Self {
+    pub fn new_request_with_id(rq_id: RqId, method: &str) -> Self {
         let mut msg = Self::new();
         msg.set_request_id(rq_id);
         msg.set_method(method);
@@ -49,7 +51,7 @@ impl RpcMessage {
         //}
         msg
     }
-    fn create_response(&self) -> Result<RpcMessage, &str> {
+    pub fn create_response(&self) -> Result<RpcMessage, &str> {
         if self.is_request() {
             if let Some(rqid) = self.request_id() {
                 let mut msg = RpcMessage::new();
@@ -62,7 +64,7 @@ impl RpcMessage {
         Err("Not RPC Request")
     }
 
-    fn from_rpcvalue(rv: RpcValue) -> Result<Self, &'static str> {
+    pub fn from_rpcvalue(rv: RpcValue) -> Result<Self, &'static str> {
         if !rv.has_meta() {
             return Err("Not RpcMessage")
         }
@@ -71,7 +73,7 @@ impl RpcMessage {
         }
         Ok(RpcMessage(rv))
     }
-    fn as_rpcvalue(&self) -> &RpcValue {
+    pub fn as_rpcvalue(&self) -> &RpcValue {
         return &self.0
     }
 
@@ -80,7 +82,7 @@ impl RpcMessage {
         old_id + 1
     }
 
-    fn is_request(&self) -> bool {
+    pub fn is_request(&self) -> bool {
         if let Some(_) = self.request_id() {
             if let Some(_) = self.method() {
                 return true;
@@ -88,7 +90,7 @@ impl RpcMessage {
         }
         return false;
     }
-    fn is_response(&self) -> bool {
+    pub fn is_response(&self) -> bool {
         if let Some(_) = self.request_id() {
             if let None = self.method() {
                 return true;
@@ -96,7 +98,7 @@ impl RpcMessage {
         }
         return false;
     }
-    fn is_signal(&self) -> bool {
+    pub fn is_signal(&self) -> bool {
         if let None = self.request_id() {
             if let Some(_) = self.method() {
                 return true;
@@ -188,7 +190,7 @@ impl DerefMut for RpcMessage {
     }
 }
 */
-pub trait RpcMessageMeta {
+pub trait RpcMessageMetaTags {
     type Target;
     fn tag(&self, id: i32) -> Option<&RpcValue>;
     fn set_tag(&mut self, id: i32, val: Option<RpcValue>) -> &mut Self::Target;
@@ -202,6 +204,16 @@ pub trait RpcMessageMeta {
     }
     fn set_request_id(&mut self, id: RqId) -> &mut Self::Target {
         self.set_tag(Tag::RequestId as i32, Some(RpcValue::new(id)))
+    }
+    fn shv_path(&self) -> Option<&str> {
+        let t = self.tag(Tag::ShvPath as i32);
+        match t {
+            None => None,
+            Some(rv) => Some(rv.as_str()),
+        }
+    }
+    fn set_shv_path(&mut self, shv_path: &str) -> &mut Self::Target {
+        self.set_tag(Tag::ShvPath as i32, Some(RpcValue::new(shv_path)))
     }
     fn method(&self) -> Option<&str> {
         let t = self.tag(Tag::Method as i32);
@@ -260,7 +272,7 @@ pub trait RpcMessageMeta {
         }
     }
 }
-impl RpcMessageMeta for RpcMessage {
+impl RpcMessageMetaTags for RpcMessage {
     type Target = RpcMessage;
 
     fn tag(&self, id: i32) -> Option<&RpcValue> {
@@ -271,7 +283,7 @@ impl RpcMessageMeta for RpcMessage {
     }
 }
 
-impl RpcMessageMeta for MetaMap {
+impl RpcMessageMetaTags for MetaMap {
     type Target = MetaMap;
 
     fn tag(&self, id: i32) -> Option<&RpcValue> {
@@ -327,11 +339,23 @@ impl RpcError {
     }
 }
 
+impl fmt::Display for RpcMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_rpcvalue().to_cpon())
+    }
+}
+/*
+impl fmt::Debug for RpcMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.as_rpcvalue().to_cpon())
+    }
+}
+*/
 #[cfg(test)]
 mod test {
     use crate::RpcValue;
     use crate::RpcMessage;
-    use crate::rpcmessage::RpcMessageMeta;
+    use crate::rpcmessage::RpcMessageMetaTags;
 
     #[test]
     fn rpc_request() {

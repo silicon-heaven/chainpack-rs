@@ -1,4 +1,4 @@
-use chainpackrpc::{RpcValue};
+use chainpack::{RpcValue};
 use log;
 
 // fn to_bin(v: &[u8]) -> String {

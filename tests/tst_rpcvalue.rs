@@ -1,6 +1,4 @@
-use chainpackrpc;
-use chainpackrpc::{RpcValue, Decimal};
-// use chainpackrpc::ChainPackWriter;
+use chainpack::{RpcValue, Decimal};
 use std::mem::size_of;
 
 /// Setup function that is only run once, even if called multiple times.
