@@ -1,8 +1,8 @@
 mod datetime;
 mod decimal;
 mod metamap;
-mod rpcvalue;
-mod rpctype;
+pub mod rpcvalue;
+pub mod rpctype;
 pub mod rpcmessage;
 
 mod reader;
