@@ -33,17 +33,27 @@ pub enum Key {Params = 1, Result, Error, ErrorCode, ErrorMessage, MAX }
 #[derive(Clone, Debug)]
 pub struct RpcMessage (RpcValue);
 impl RpcMessage {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         let mut mm = MetaMap::new();
         mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
         //mm.insert(Tag::Method as i32, RpcValue::new(method));
         RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(mm)))
     }
+    pub fn new(meta: MetaMap, value: Value) -> Self {
+        if let None = meta.tag(rpctype::Tag::MetaTypeId as i32) {
+            panic!("Tag MetaTypeId is missing!");
+        }
+        if let Value::IMap(val) = value {
+            let rv = RpcValue::new_with_meta(*val, Some(meta));
+            return RpcMessage(rv)
+        }
+        panic!("Value must be IMap!");
+    }
     pub fn new_request(method: &str) -> Self {
         Self::new_request_with_id(Self::next_request_id(), method)
     }
     pub fn new_request_with_id(rq_id: RqId, method: &str) -> Self {
-        let mut msg = Self::new();
+        let mut msg = Self::default();
         msg.set_request_id(rq_id);
         msg.set_method(method);
         //if let Some(rv) = params {
@@ -51,19 +61,9 @@ impl RpcMessage {
         //}
         msg
     }
-    pub fn create_response(&self) -> Result<RpcMessage, &str> {
-        if self.is_request() {
-            if let Some(rqid) = self.request_id() {
-                let mut msg = RpcMessage::new();
-                msg.set_request_id(rqid);
-                msg.set_caller_ids(&self.caller_ids());
-                return Ok(msg)
-            }
-            return Err("Request ID is missing")
-        }
-        Err("Not RPC Request")
+    pub fn from_meta(meta: MetaMap) -> Self {
+        RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(meta)))
     }
-
     pub fn from_rpcvalue(rv: RpcValue) -> Result<Self, &'static str> {
         if !rv.has_meta() {
             return Err("Not RpcMessage")
@@ -82,30 +82,6 @@ impl RpcMessage {
         old_id + 1
     }
 
-    pub fn is_request(&self) -> bool {
-        if let Some(_) = self.request_id() {
-            if let Some(_) = self.method() {
-                return true;
-            }
-        }
-        return false;
-    }
-    pub fn is_response(&self) -> bool {
-        if let Some(_) = self.request_id() {
-            if let None = self.method() {
-                return true;
-            }
-        }
-        return false;
-    }
-    pub fn is_signal(&self) -> bool {
-        if let None = self.request_id() {
-            if let Some(_) = self.method() {
-                return true;
-            }
-        }
-        return false;
-    }
     // fn request_id_mm(meta: &MetaMap) -> Option<i64> {
     //     match Self::tag_mm(meta, Tag::RequestId as i32) {
     //         None => None,
@@ -175,6 +151,22 @@ impl RpcMessage {
             panic!("Not RpcMessage")
         }
     }
+    pub fn create_response(&self) -> Result<Self, &str> {
+        let meta = Self::create_response_meta(self.as_rpcvalue().meta())?;
+        Ok(Self::from_meta(meta))
+    }
+    pub fn create_response_meta(src: &MetaMap) -> Result<MetaMap, &str> {
+        if src.is_request() {
+            if let Some(rqid) = src.request_id() {
+                let mut dest = MetaMap::new();
+                dest.set_request_id(rqid);
+                dest.set_caller_ids(&src.caller_ids());
+                return Ok(dest)
+            }
+            return Err("Request ID is missing")
+        }
+        Err("Not RPC Request")
+    }
 
 }
 /*
@@ -192,8 +184,34 @@ impl DerefMut for RpcMessage {
 */
 pub trait RpcMessageMetaTags {
     type Target;
+
     fn tag(&self, id: i32) -> Option<&RpcValue>;
     fn set_tag(&mut self, id: i32, val: Option<RpcValue>) -> &mut Self::Target;
+
+    fn is_request(&self) -> bool {
+        if let Some(_) = self.request_id() {
+            if let Some(_) = self.method() {
+                return true;
+            }
+        }
+        return false;
+    }
+    fn is_response(&self) -> bool {
+        if let Some(_) = self.request_id() {
+            if let None = self.method() {
+                return true;
+            }
+        }
+        return false;
+    }
+    fn is_signal(&self) -> bool {
+        if let None = self.request_id() {
+            if let Some(_) = self.method() {
+                return true;
+            }
+        }
+        return false;
+    }
 
     fn request_id(&self) -> Option<RqId> {
         let t = self.tag(Tag::RequestId as i32);

@@ -1,6 +1,7 @@
 use crate::rpcvalue::RpcValue;
 use std::fmt;
 use std::ops::Index;
+use crate::{CponWriter, Writer};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MetaKey {
@@ -115,12 +116,6 @@ impl MetaMap {
     }
 }
 
-impl fmt::Debug for MetaMap {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.0)
-    }
-}
-
 impl Index<&str> for MetaMap {
     type Output = RpcValue;
 
@@ -141,6 +136,27 @@ impl Index<i32> for MetaMap {
         match ix {
             Some(ix) => &self.0[ix].value,
             None => panic!("Invalid MetaMap key '{}'", key),
+        }
+    }
+}
+
+impl fmt::Debug for MetaMap {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+impl fmt::Display for MetaMap {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        let mut buff: Vec<u8> = Vec::new();
+        let mut wr = CponWriter::new(&mut buff);
+        let res = wr.write_meta(self);
+        if let Err(e) = res {
+            log::warn!("to_cpon write with error: {}", e);
+            return write!(fmt, "<invalid>")
+        }
+        match String::from_utf8(buff) {
+            Ok(s) => write!(fmt, "{}", s),
+            Err(_) => write!(fmt, "<invalid>"),
         }
     }
 }
