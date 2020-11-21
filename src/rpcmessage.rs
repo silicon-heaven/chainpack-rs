@@ -82,24 +82,6 @@ impl RpcMessage {
         old_id + 1
     }
 
-    // fn request_id_mm(meta: &MetaMap) -> Option<i64> {
-    //     match Self::tag_mm(meta, Tag::RequestId as i32) {
-    //         None => None,
-    //         Some(rv) => Some(rv.to_i64()),
-    //     }
-    // }
-    // fn request_id(&self) -> Option<i64> {
-    //     return Self::request_id_mm(self.0.meta())
-    // }
-    // fn set_request_id_mm(meta: &mut MetaMap, id: i64) -> &mut MetaMap {
-    //     Self::set_tag_mm(meta, Tag::RequestId as i32, Some(RpcValue::new(id)));
-    //     meta
-    // }
-    // fn set_request_id(&mut self, id: i64) -> &mut Self {
-    //     Self::set_request_id_mm(self.0.meta_mut().unwrap(), id);
-    //     self
-    // }
-
     pub fn params(&self) -> Option<&RpcValue> { self.key(Key::Params as i32) }
     pub fn set_params(&mut self, rv: RpcValue) -> &mut Self  { self.set_key(Key::Params, Some(rv));self }
     pub fn result(&self) -> Option<&RpcValue> { self.key(Key::Result as i32) }
@@ -113,6 +95,12 @@ impl RpcMessage {
     pub fn set_error(&mut self, err: RpcError) -> &mut Self {
         self.set_key(Key::Result, Some(err.to_rpcvalue()));
         self
+    }
+    pub fn is_success(&self) -> bool {
+        match self.result() {
+            Some(_) => true,
+            None => false,
+        }
     }
 
     fn tag<Idx>(&self, key: Idx) -> Option<&RpcValue>
@@ -159,6 +147,7 @@ impl RpcMessage {
         if src.is_request() {
             if let Some(rqid) = src.request_id() {
                 let mut dest = MetaMap::new();
+                dest.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
                 dest.set_request_id(rqid);
                 dest.set_caller_ids(&src.caller_ids());
                 return Ok(dest)
