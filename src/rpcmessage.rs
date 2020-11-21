@@ -219,7 +219,7 @@ pub trait RpcMessageMetaTags {
             Some(rv) => Some(rv.as_str()),
         }
     }
-    fn set_shv_path(&mut self, shv_path: &str) -> &mut Self::Target {
+    fn set_shvpath(&mut self, shv_path: &str) -> &mut Self::Target {
         self.set_tag(Tag::ShvPath as i32, Some(RpcValue::new(shv_path)))
     }
     fn method(&self) -> Option<&str> {
