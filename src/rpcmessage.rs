@@ -49,16 +49,17 @@ impl RpcMessage {
         }
         panic!("Value must be IMap!");
     }
-    pub fn new_request(method: &str) -> Self {
-        Self::new_request_with_id(Self::next_request_id(), method)
+    pub fn new_request(shvpath: &str, method: &str, params: Option<RpcValue>) -> Self {
+        Self::new_request_with_id(Self::next_request_id(), shvpath, method, params)
     }
-    pub fn new_request_with_id(rq_id: RqId, method: &str) -> Self {
+    pub fn new_request_with_id(rq_id: RqId, shvpath: &str, method: &str, params: Option<RpcValue>) -> Self {
         let mut msg = Self::default();
         msg.set_request_id(rq_id);
+        msg.set_shvpath(shvpath);
         msg.set_method(method);
-        //if let Some(rv) = params {
-        //    msg.set_params(rv);
-        //}
+        if let Some(rv) = params {
+            msg.set_params(rv);
+        }
         msg
     }
     pub fn from_meta(meta: MetaMap) -> Self {
@@ -207,6 +208,12 @@ pub trait RpcMessageMetaTags {
         match t {
             None => None,
             Some(rv) => Some(rv.as_i64()),
+        }
+    }
+    fn try_request_id(&self) -> Result<RqId, &str> {
+        match self.request_id() {
+            None => Err("Request id not exists."),
+            Some(id) => Ok(id),
         }
     }
     fn set_request_id(&mut self, id: RqId) -> &mut Self::Target {
@@ -367,7 +374,7 @@ mod test {
     #[test]
     fn rpc_request() {
         let id = RpcMessage::next_request_id();
-        let mut rq = RpcMessage::new_request_with_id(id, "foo");
+        let mut rq = RpcMessage::new_request_with_id(id, "foo/bar", "baz", None);
         let params = RpcValue::new(123);
         rq.set_params(params.clone());
         assert_eq!(rq.params(), Some(&params));
