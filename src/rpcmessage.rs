@@ -77,6 +77,9 @@ impl RpcMessage {
     pub fn as_rpcvalue(&self) -> &RpcValue {
         return &self.0
     }
+    pub fn to_cpon(&self) -> String {
+        self.0.to_cpon()
+    }
 
     pub fn next_request_id() -> RqId {
         let old_id = G_RPC_REQUEST_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -210,7 +213,7 @@ pub trait RpcMessageMetaTags {
             Some(rv) => Some(rv.as_i64()),
         }
     }
-    fn try_request_id(&self) -> Result<RqId, &str> {
+    fn try_request_id(&self) -> Result<RqId, &'static str> {
         match self.request_id() {
             None => Err("Request id not exists."),
             Some(id) => Ok(id),
