@@ -49,19 +49,6 @@ impl RpcMessage {
         }
         panic!("Value must be IMap!");
     }
-    pub fn new_request(shvpath: &str, method: &str, params: Option<RpcValue>) -> Self {
-        Self::new_request_with_id(Self::next_request_id(), shvpath, method, params)
-    }
-    pub fn new_request_with_id(rq_id: RqId, shvpath: &str, method: &str, params: Option<RpcValue>) -> Self {
-        let mut msg = Self::default();
-        msg.set_request_id(rq_id);
-        msg.set_shvpath(shvpath);
-        msg.set_method(method);
-        if let Some(rv) = params {
-            msg.set_params(rv);
-        }
-        msg
-    }
     pub fn from_meta(meta: MetaMap) -> Self {
         RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(meta)))
     }
@@ -143,11 +130,24 @@ impl RpcMessage {
             panic!("Not RpcMessage")
         }
     }
-    pub fn create_response(&self) -> Result<Self, &str> {
-        let meta = Self::create_response_meta(self.as_rpcvalue().meta())?;
+    pub fn create_request(shvpath: &str, method: &str, params: Option<RpcValue>) -> Self {
+        Self::create_request_with_id(Self::next_request_id(), shvpath, method, params)
+    }
+    pub fn create_request_with_id(rq_id: RqId, shvpath: &str, method: &str, params: Option<RpcValue>) -> Self {
+        let mut msg = Self::default();
+        msg.set_request_id(rq_id);
+        msg.set_shvpath(shvpath);
+        msg.set_method(method);
+        if let Some(rv) = params {
+            msg.set_params(rv);
+        }
+        msg
+    }
+    pub fn prepare_response(&self) -> Result<Self, &'static str> {
+        let meta = Self::prepare_response_meta(self.as_rpcvalue().meta())?;
         Ok(Self::from_meta(meta))
     }
-    pub fn create_response_meta(src: &MetaMap) -> Result<MetaMap, &str> {
+    pub fn prepare_response_meta(src: &MetaMap) -> Result<MetaMap, &'static str> {
         if src.is_request() {
             if let Some(rqid) = src.request_id() {
                 let mut dest = MetaMap::new();
@@ -377,7 +377,7 @@ mod test {
     #[test]
     fn rpc_request() {
         let id = RpcMessage::next_request_id();
-        let mut rq = RpcMessage::new_request_with_id(id, "foo/bar", "baz", None);
+        let mut rq = RpcMessage::create_request_with_id(id, "foo/bar", "baz", None);
         let params = RpcValue::new(123);
         rq.set_params(params.clone());
         assert_eq!(rq.params(), Some(&params));
@@ -394,7 +394,7 @@ mod test {
         let id = rq.pop_caller_id();
         assert_eq!(id, None);
         rq.push_caller_id(4);
-        let mut resp = rq.create_response().unwrap();
+        let mut resp = rq.prepare_response().unwrap();
         assert_eq!(&resp.caller_ids(), &vec![4]);
         assert_eq!(resp.pop_caller_id(), Some(4));
         //let cpon = rq.as_rpcvalue().to_cpon();
