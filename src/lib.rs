@@ -1,6 +1,7 @@
 mod datetime;
 mod decimal;
 mod metamap;
+pub mod metamethod;
 pub mod rpcvalue;
 pub mod rpctype;
 pub mod rpcmessage;

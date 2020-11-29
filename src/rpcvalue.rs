@@ -243,12 +243,14 @@ impl RpcValue {
 	pub fn as_i64(&self) -> i64 {
 		match &self.value {
 			Value::Int(d) => *d,
+			Value::UInt(d) => *d as i64,
 			_ => 0,
 		}
 	}
 	pub fn as_i32(&self) -> i32 { self.as_i64() as i32 }
 	pub fn as_u64(&self) -> u64 {
 		match &self.value {
+			Value::Int(d) => *d as u64,
 			Value::UInt(d) => *d,
 			_ => 0,
 		}
