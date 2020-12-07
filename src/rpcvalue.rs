@@ -13,17 +13,18 @@ use crate::writer::Writer;
 use crate::CponWriter;
 use crate::chainpack::ChainPackWriter;
 use crate::chainpack::ChainPackReader;
+use std::str::Utf8Error;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
 const EMPTY_STR_REF: &str = "";
-const EMPTY_BLOB_REF: &[u8] = EMPTY_STR_REF.as_bytes();
+const EMPTY_BYTES_REF: &[u8] = EMPTY_STR_REF.as_bytes();
 lazy_static! {
     static ref EMPTY_LIST_REF: Vec<RpcValue> = {
         let v = Vec::new();
         v
     };
-    static ref EMPTY_MAP_REF: BTreeMap<String, RpcValue> = {
+    static ref EMPTY_MAP_REF: BTreeMap<Data, RpcValue> = {
         let m = BTreeMap::new();
         m
     };
@@ -34,9 +35,9 @@ lazy_static! {
     static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
 }
 
-pub type Blob = Vec<u8>;
+pub type Data = Vec<u8>;
 pub type List = Vec<RpcValue>;
-pub type Map = BTreeMap<String, RpcValue>;
+pub type Map = BTreeMap<Data, RpcValue>;
 pub type IMap = BTreeMap<i32, RpcValue>;
 
 #[allow(non_snake_case)]
@@ -49,8 +50,8 @@ pub enum Value {
 	Bool(bool),
 	DateTime(DateTime),
 	Decimal(Decimal),
-	String(Box<String>),
-	Blob(Box<Blob>),
+	Data(Box<Data>),
+	//Blob(Box<Blob>),
 	List(Box<List>),
 	Map(Box<Map>),
 	IMap(Box<IMap>),
@@ -69,8 +70,8 @@ impl Value {
 			Value::Bool(_) => "Bool",
 			Value::DateTime(_) => "DateTime",
 			Value::Decimal(_) => "Decimal",
-			Value::String(_) => "String",
-			Value::Blob(_) => "Blob",
+			Value::Data(_) => "Data",
+			//Value::Blob(_) => "Blob",
 			Value::List(_) => "List",
 			Value::Map(_) => "Map",
 			Value::IMap(_) => "IMap",
@@ -84,10 +85,11 @@ pub trait FromValue {
 
 impl FromValue for Value { fn chainpack_make_value(self) -> Value { self } }
 impl FromValue for () { fn chainpack_make_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.to_string())) } }
-impl FromValue for Vec<u8> { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self)) } }
-impl FromValue for &[u8] { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self.to_vec())) } }
-impl FromValue for &String { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.clone())) } }
+impl FromValue for &str { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for String { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.into_bytes())) } }
+impl FromValue for Vec<u8> { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self)) } }
+impl FromValue for &[u8] { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.to_vec())) } }
+impl FromValue for &String { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.as_bytes().to_vec())) } }
 impl FromValue for i32 { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for u32 { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for isize { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
@@ -132,9 +134,9 @@ macro_rules! from_value_box {
     };
 }
 
-from_value_box!(String, String);
+//from_value_box!(Bytes, Bytes);
 from_value_box!(Vec<RpcValue>, List);
-from_value_box!(BTreeMap<String, RpcValue>, Map);
+from_value_box!(BTreeMap<Data, RpcValue>, Map);
 from_value_box!(BTreeMap<i32, RpcValue>, IMap);
 
 macro_rules! is_xxx {
@@ -226,7 +228,7 @@ impl RpcValue {
 	is_xxx!(is_null, Value::Null);
 	is_xxx!(is_bool, Value::Bool(_));
 	is_xxx!(is_int, Value::Int(_));
-	is_xxx!(is_string, Value::String(_));
+	is_xxx!(is_data, Value::Data(_));
 	is_xxx!(is_list, Value::List(_));
 	is_xxx!(is_map, Value::Map(_));
 	is_xxx!(is_imap, Value::IMap(_));
@@ -274,16 +276,16 @@ impl RpcValue {
 			_ => Decimal::new(0, 0),
 		}
 	}
-	pub fn as_str(&self) -> &str {
+	pub fn as_str(&self) -> Result<&str, Utf8Error> {
 		match &self.value {
-			Value::String(b) => b,
-			_ => EMPTY_STR_REF,
+			Value::Data(b) => std::str::from_utf8(b),
+			_ => std::str::from_utf8(EMPTY_BYTES_REF),
 		}
 	}
-	pub fn as_blob(&self) -> &[u8] {
+	pub fn as_data(&self) -> &[u8] {
 		match &self.value {
-			Value::Blob(b) => b,
-			_ => EMPTY_BLOB_REF,
+			Value::Data(b) => b,
+			_ => EMPTY_BYTES_REF,
 		}
 	}
 	pub fn as_list(&self) -> &Vec<RpcValue> {
@@ -292,7 +294,7 @@ impl RpcValue {
 			_ => &EMPTY_LIST_REF,
 		}
 	}
-	pub fn as_map(&self) -> &BTreeMap<String, RpcValue> {
+	pub fn as_map(&self) -> &BTreeMap<Data, RpcValue> {
 		match &self.value {
 			Value::Map(b) => &b,
 			_ => &EMPTY_MAP_REF,
@@ -359,7 +361,7 @@ mod test {
 
 	use chrono::Offset;
 
-	use crate::DateTime;
+	use crate::{DateTime, Data};
 	use crate::Decimal;
 	use crate::metamap::MetaMap;
 	use crate::rpcvalue::{RpcValue, Value};
@@ -393,9 +395,9 @@ mod test {
 		let rv = RpcValue::new(true);
 		assert_eq!(rv.as_bool(), true);
 		let rv = RpcValue::new("foo");
-		assert_eq!(rv.as_str(), "foo");
+		assert_eq!(rv.as_str().unwrap(), "foo");
 		let rv = RpcValue::new(&"bar".to_string());
-		assert_eq!(rv.as_str(), "bar");
+		assert_eq!(rv.as_data(), b"bar");
 		let rv = RpcValue::new(123);
 		assert_eq!(rv.as_i32(), 123);
 		let rv = RpcValue::new(12.3);
@@ -422,9 +424,9 @@ mod test {
 		let rv = RpcValue::new(vec1.clone());
 		assert_eq!(rv.as_list(), &vec1);
 
-		let mut m: BTreeMap<String, RpcValue> = BTreeMap::new();
-		m.insert("foo".to_string(), RpcValue::new(123));
-		m.insert("bar".to_string(), RpcValue::new("foo"));
+		let mut m: BTreeMap<Data, RpcValue> = BTreeMap::new();
+		m.insert(b"foo".to_vec(), RpcValue::new(123));
+		m.insert(b"bar".to_vec(), RpcValue::new("foo"));
 		let rv = RpcValue::new(m.clone());
 		assert_eq!(rv.as_map(), &m);
 

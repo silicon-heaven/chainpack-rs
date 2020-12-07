@@ -11,7 +11,7 @@ mod writer;
 mod cpon;
 mod chainpack;
 
-pub use rpcvalue::{RpcValue};
+pub use rpcvalue::{RpcValue, Data};
 pub use rpcmessage::{RpcMessage, RpcMessageMetaTags};
 pub use rpcvalue::{Value};
 pub use datetime::{DateTime};

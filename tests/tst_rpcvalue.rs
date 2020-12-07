@@ -182,7 +182,7 @@ fn test_cpon_chainpack() {
             let cpon2 = rv2.to_cpon();
             assert_eq!(cpon2, cpon[1]);
             let rv3 = from_cpon(&cpon2);
-            assert_eq!(rv3.as_str(), cpon[0]);
+            assert_eq!(rv3.as_str().unwrap(), cpon[0]);
         }
     }
 }
@@ -193,15 +193,6 @@ fn test_conversions()
     init_log();
     log::info!("testConversions ------------");
     for lst in [
-        [r#"/*comment 1*/{ /*comment 2*/
-		    "foo"/*comment "3"*/: "bar", //comment to end of line
-		    "baz" : 1,
-            /*
-            multiline comment
-            "baz" : 1,
-            "baz" : 1, // single inside multi
-            */
-		}"#, "{\"baz\":1,\"foo\":\"bar\"}"],
         [&(u64::MAX.to_string() + "u"), ""],
         [&(u64::MIN.to_string() + "u"), ""],
         [&i64::MAX.to_string(), ""],
@@ -226,6 +217,7 @@ fn test_conversions()
         ["-0.00012", "-12e-5"],
         ["-1234567890.", "-1234567890."],
         ["\"foo\"", ""],
+        ["x\"abcd\"", ""],
         ["[]", ""],
         ["[1]", ""],
         ["[1,]", "[1]"],

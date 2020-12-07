@@ -3,7 +3,7 @@ use crate::rpcvalue::List;
 
 #[derive(Copy, Clone)]
 pub enum Signature {
-    VoidVoid = 1,
+    VoidVoid = 0,
     VoidParam,
     RetVoid,
     RetParam,

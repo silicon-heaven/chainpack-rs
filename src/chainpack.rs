@@ -1,4 +1,4 @@
-use crate::{RpcValue, MetaMap, metamap::MetaKey, Decimal, DateTime, WriteResult, Value};
+use crate::{RpcValue, MetaMap, metamap::MetaKey, Decimal, DateTime, WriteResult, Value, Data};
 use std::io;
 use crate::writer::{ByteWriter, Writer};
 use std::io::{Write, Read};
@@ -227,10 +227,10 @@ impl<'a, W> ChainPackWriter<'a, W>
         self.write_byte(PackingSchema::TERM as u8)?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_map(&mut self, map: &BTreeMap<String, RpcValue>) -> WriteResult {
+    fn write_map(&mut self, map: &BTreeMap<Data, RpcValue>) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::Map as u8)?;
         for (k, v) in map {
-            self.write_string(k)?;
+            self.write_data(k)?;
             self.write(v)?;
         }
         self.write_byte(PackingSchema::TERM as u8)?;
@@ -251,10 +251,10 @@ impl<'a, W> ChainPackWriter<'a, W>
         self.write_bytes(s.as_bytes())?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_blob(&mut self, blob: &[u8]) -> WriteResult {
+    fn write_data(&mut self, data: &[u8]) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::Blob as u8)?;
-        self.write_uint_data(blob.len() as u64)?;
-        self.write_bytes(blob)?;
+        self.write_uint_data(data.len() as u64)?;
+        self.write_bytes(data)?;
         Ok(self.byte_writer.count() - cnt)
     }
 }
@@ -267,7 +267,7 @@ impl<'a, W> Writer for ChainPackWriter<'a, W>
         self.write_byte(PackingSchema::MetaMap as u8)?;
         for k in map.0.iter() {
             match &k.key {
-                MetaKey::String(s) => self.write_string(s)?,
+                MetaKey::Str(s) => self.write_data(s)?,
                 MetaKey::Int(i) => self.write_int(*i as i64)?,
             };
             self.write(&k.value)?;
@@ -295,8 +295,8 @@ impl<'a, W> Writer for ChainPackWriter<'a, W>
             },
             Value::Int(n) => self.write_int(*n)?,
             Value::UInt(n) => self.write_uint(*n)?,
-            Value::String(s) => self.write_string(s)?,
-            Value::Blob(b) => self.write_blob(b)?,
+            Value::Data(s) => self.write_data(s)?,
+            //Value::Blob(b) => self.write_data(b)?,
             Value::Double(n) => self.write_double(*n)?,
             Value::Decimal(d) => self.write_decimal(d)?,
             Value::DateTime(d) => self.write_datetime(d)?,
@@ -432,7 +432,7 @@ impl<'a, R> ChainPackReader<'a, R>
         return Ok(Value::new(lst))
     }
     fn read_map_data(&mut self) -> Result<Value, ReadError> {
-        let mut map: BTreeMap<String, RpcValue> = BTreeMap::new();
+        let mut map: BTreeMap<Data, RpcValue> = BTreeMap::new();
         loop {
             let b = self.peek_byte();
             if b == PackingSchema::TERM as u8 {
@@ -441,14 +441,14 @@ impl<'a, R> ChainPackReader<'a, R>
             }
             let k = self.read()?;
             let key;
-            if k.is_string() {
-                key = k.as_str();
+            if k.is_data() {
+                key = k.as_data();
             }
             else {
                 return Err(self.make_error(&format!("Invalid Map key '{}'", k)))
             }
             let val = self.read()?;
-            map.insert(key.to_string(), val);
+            map.insert(key.to_vec(), val);
         }
         return Ok(Value::new(map))
     }
@@ -531,7 +531,7 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
                 Value::Int(i) => {
                     map.insert(i as i32, val);
                 }
-                Value::String(s) => {
+                Value::Data(s) => {
                     map.insert(&**s, val);
                 }
                 _ => {

@@ -1,23 +1,23 @@
 use crate::rpcvalue::RpcValue;
 use std::fmt;
 use std::ops::Index;
-use crate::{CponWriter, Writer};
+use crate::{CponWriter, Writer, Data};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MetaKey {
     Int(i32),
-    String(String),
+    Str(Data),
 }
 
 pub enum MetaKeyRef<'a> {
     Int(i32),
-    Str(&'a str),
+    Str(&'a [u8]),
 }
 impl<'a> MetaKeyRef<'a> {
     fn to_metakey(&'a self) -> MetaKey {
         match self {
             MetaKeyRef::Int(val) => MetaKey::Int(*val),
-            MetaKeyRef::Str(val) => MetaKey::String(val.to_string()),
+            MetaKeyRef::Str(val) => MetaKey::Str(val.to_vec()),
         }
     }
 }
@@ -26,6 +26,11 @@ pub trait IntoMetaKeyRef: Copy {
     fn to_metakeyref(&self) -> MetaKeyRef;
 }
 impl IntoMetaKeyRef for &str {
+    fn to_metakeyref(&self) -> MetaKeyRef {
+        MetaKeyRef::Str(self.as_bytes())
+    }
+}
+impl IntoMetaKeyRef for &[u8] {
     fn to_metakeyref(&self) -> MetaKeyRef {
         MetaKeyRef::Str(self)
     }
@@ -97,7 +102,7 @@ impl MetaMap {
         for kv in self.0.iter() {
             let mk = key.to_metakeyref();
             match &kv.key {
-                MetaKey::String(k1) => {
+                MetaKey::Str(k1) => {
                     match &mk {
                         MetaKeyRef::Str(k2) => if k1 == k2 {return Some(ix)}
                         _ 		=> (),
@@ -120,7 +125,7 @@ impl Index<&str> for MetaMap {
     type Output = RpcValue;
 
     fn index(&self, key: &str) -> &'_ Self::Output {
-        let ix = self.find(key);
+        let ix = self.find(key.as_bytes());
         match ix {
             Some(ix) => &self.0[ix].value,
             None => panic!("Invalid MetaMap key '{}'", key),
@@ -166,6 +171,7 @@ mod test {
     use crate::metamap::MetaMap;
     use crate::rpcvalue::RpcValue;
     use std::collections::BTreeMap;
+    use crate::Data;
 
     #[test]
     fn metamap_insert() {
@@ -178,9 +184,9 @@ mod test {
         // assert_eq!(123, vv.unwrap().to_i32().unwrap());
 
         mm.insert("foo", RpcValue::new("bar")).insert(123, RpcValue::new("baz"));
-        assert_eq!(mm["foo"].as_str(), "bar");
+        assert_eq!(mm["foo"].as_str().unwrap(), "bar");
         // println!("val: {:?}", mm[123]);
-        assert_eq!(mm[123].as_str(), "baz");
+        assert_eq!(mm[123].as_str().unwrap(), "baz");
 
         let v1 = vec![RpcValue::new("foo"), RpcValue::new("bar"), RpcValue::new("baz")];
         let v2 = v1.clone();
@@ -195,10 +201,10 @@ mod test {
         mm.insert("imap", RpcValue::new(v1));
         assert_eq!(mm["imap"].as_imap(), &v2);
 
-        let mut v1: BTreeMap<String, RpcValue> = BTreeMap::new();
-        v1.insert("a".to_string(), RpcValue::new("foo"));
-        v1.insert("b".to_string(), RpcValue::new("bar"));
-        v1.insert("c".to_string(), RpcValue::new("baz"));
+        let mut v1: BTreeMap<Data, RpcValue> = BTreeMap::new();
+        v1.insert(b"a".to_vec(), RpcValue::new("foo"));
+        v1.insert(b"b".to_vec(), RpcValue::new("bar"));
+        v1.insert(b"c".to_vec(), RpcValue::new("baz"));
         let v2 = v1.clone();
         mm.insert("map", RpcValue::new(v1));
         assert_eq!(mm["map"].as_map(), &v2);
