@@ -6,18 +6,18 @@ use crate::{CponWriter, Writer, Data};
 #[derive(Debug, Clone, PartialEq)]
 pub enum MetaKey {
     Int(i32),
-    Str(Data),
+    Str(String),
 }
 
 pub enum MetaKeyRef<'a> {
     Int(i32),
-    Str(&'a [u8]),
+    Str(&'a str),
 }
 impl<'a> MetaKeyRef<'a> {
     fn to_metakey(&'a self) -> MetaKey {
         match self {
             MetaKeyRef::Int(val) => MetaKey::Int(*val),
-            MetaKeyRef::Str(val) => MetaKey::Str(val.to_vec()),
+            MetaKeyRef::Str(val) => MetaKey::Str(val.to_string()),
         }
     }
 }
@@ -27,14 +27,10 @@ pub trait IntoMetaKeyRef: Copy {
 }
 impl IntoMetaKeyRef for &str {
     fn to_metakeyref(&self) -> MetaKeyRef {
-        MetaKeyRef::Str(self.as_bytes())
-    }
-}
-impl IntoMetaKeyRef for &[u8] {
-    fn to_metakeyref(&self) -> MetaKeyRef {
         MetaKeyRef::Str(self)
     }
 }
+
 impl IntoMetaKeyRef for i32 {
     fn to_metakeyref(&self) -> MetaKeyRef {
         MetaKeyRef::Int(*self)
@@ -125,7 +121,7 @@ impl Index<&str> for MetaMap {
     type Output = RpcValue;
 
     fn index(&self, key: &str) -> &'_ Self::Output {
-        let ix = self.find(key.as_bytes());
+        let ix = self.find(key);
         match ix {
             Some(ix) => &self.0[ix].value,
             None => panic!("Invalid MetaMap key '{}'", key),
@@ -201,10 +197,10 @@ mod test {
         mm.insert("imap", RpcValue::new(v1));
         assert_eq!(mm["imap"].as_imap(), &v2);
 
-        let mut v1: BTreeMap<Data, RpcValue> = BTreeMap::new();
-        v1.insert(b"a".to_vec(), RpcValue::new("foo"));
-        v1.insert(b"b".to_vec(), RpcValue::new("bar"));
-        v1.insert(b"c".to_vec(), RpcValue::new("baz"));
+        let mut v1: BTreeMap<String, RpcValue> = BTreeMap::new();
+        v1.insert("a".to_string(), RpcValue::new("foo"));
+        v1.insert("b".to_string(), RpcValue::new("bar"));
+        v1.insert("c".to_string(), RpcValue::new("baz"));
         let v2 = v1.clone();
         mm.insert("map", RpcValue::new(v1));
         assert_eq!(mm["map"].as_map(), &v2);

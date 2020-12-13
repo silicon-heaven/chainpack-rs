@@ -24,11 +24,11 @@ lazy_static! {
         let v = Vec::new();
         v
     };
-    static ref EMPTY_MAP_REF: BTreeMap<Data, RpcValue> = {
+    static ref EMPTY_MAP_REF: Map = {
         let m = BTreeMap::new();
         m
     };
-    static ref EMPTY_IMAP_REF: BTreeMap<i32, RpcValue> = {
+    static ref EMPTY_IMAP_REF: IMap = {
         let m = BTreeMap::new();
         m
     };
@@ -37,7 +37,7 @@ lazy_static! {
 
 pub type Data = Vec<u8>;
 pub type List = Vec<RpcValue>;
-pub type Map = BTreeMap<Data, RpcValue>;
+pub type Map = BTreeMap<String, RpcValue>;
 pub type IMap = BTreeMap<i32, RpcValue>;
 
 #[allow(non_snake_case)]
@@ -136,7 +136,7 @@ macro_rules! from_value_box {
 
 //from_value_box!(Bytes, Bytes);
 from_value_box!(Vec<RpcValue>, List);
-from_value_box!(BTreeMap<Data, RpcValue>, Map);
+from_value_box!(BTreeMap<String, RpcValue>, Map);
 from_value_box!(BTreeMap<i32, RpcValue>, IMap);
 
 macro_rules! is_xxx {
@@ -294,7 +294,7 @@ impl RpcValue {
 			_ => &EMPTY_LIST_REF,
 		}
 	}
-	pub fn as_map(&self) -> &BTreeMap<Data, RpcValue> {
+	pub fn as_map(&self) -> &Map {
 		match &self.value {
 			Value::Map(b) => &b,
 			_ => &EMPTY_MAP_REF,
@@ -364,7 +364,7 @@ mod test {
 	use crate::{DateTime, Data};
 	use crate::Decimal;
 	use crate::metamap::MetaMap;
-	use crate::rpcvalue::{RpcValue, Value};
+	use crate::rpcvalue::{RpcValue, Value, Map};
 
 	macro_rules! show_size {
 		(header) => (
@@ -424,9 +424,9 @@ mod test {
 		let rv = RpcValue::new(vec1.clone());
 		assert_eq!(rv.as_list(), &vec1);
 
-		let mut m: BTreeMap<Data, RpcValue> = BTreeMap::new();
-		m.insert(b"foo".to_vec(), RpcValue::new(123));
-		m.insert(b"bar".to_vec(), RpcValue::new("foo"));
+		let mut m: Map = BTreeMap::new();
+		m.insert("foo".to_string(), RpcValue::new(123));
+		m.insert("bar".to_string(), RpcValue::new("foo"));
 		let rv = RpcValue::new(m.clone());
 		assert_eq!(rv.as_map(), &m);
 

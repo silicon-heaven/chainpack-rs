@@ -4,7 +4,7 @@ use crate::writer::{ByteWriter, Writer};
 use std::io::{Write, Read};
 use std::collections::BTreeMap;
 use crate::reader::{Reader, ByteReader, ReadError};
-use crate::rpcvalue::FromValue;
+use crate::rpcvalue::{FromValue, Map, IMap};
 
 #[warn(non_camel_case_types)]
 #[allow(dead_code)]
@@ -227,16 +227,16 @@ impl<'a, W> ChainPackWriter<'a, W>
         self.write_byte(PackingSchema::TERM as u8)?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_map(&mut self, map: &BTreeMap<Data, RpcValue>) -> WriteResult {
+    fn write_map(&mut self, map: &Map) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::Map as u8)?;
         for (k, v) in map {
-            self.write_data(k)?;
+            self.write_string(k)?;
             self.write(v)?;
         }
         self.write_byte(PackingSchema::TERM as u8)?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_imap(&mut self, map: &BTreeMap<i32, RpcValue>) -> WriteResult {
+    fn write_imap(&mut self, map: &IMap) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::IMap as u8)?;
         for (k, v) in map {
             self.write_int(*k as i64)?;
@@ -267,7 +267,7 @@ impl<'a, W> Writer for ChainPackWriter<'a, W>
         self.write_byte(PackingSchema::MetaMap as u8)?;
         for k in map.0.iter() {
             match &k.key {
-                MetaKey::Str(s) => self.write_data(s)?,
+                MetaKey::Str(s) => self.write_string(s)?,
                 MetaKey::Int(i) => self.write_int(*i as i64)?,
             };
             self.write(&k.value)?;
@@ -432,7 +432,7 @@ impl<'a, R> ChainPackReader<'a, R>
         return Ok(Value::new(lst))
     }
     fn read_map_data(&mut self) -> Result<Value, ReadError> {
-        let mut map: BTreeMap<Data, RpcValue> = BTreeMap::new();
+        let mut map: Map = Map::new();
         loop {
             let b = self.peek_byte();
             if b == PackingSchema::TERM as u8 {
@@ -442,13 +442,16 @@ impl<'a, R> ChainPackReader<'a, R>
             let k = self.read()?;
             let key;
             if k.is_data() {
-                key = k.as_data();
+                match std::str::from_utf8(k.as_data()) {
+                    Ok(s) => key = s,
+                    Err(e) => return Err(self.make_error(&format!("Read meta key utf8 error: {}", e))),
+                };
             }
             else {
                 return Err(self.make_error(&format!("Invalid Map key '{}'", k)))
             }
             let val = self.read()?;
-            map.insert(key.to_vec(), val);
+            map.insert(key.to_string(), val);
         }
         return Ok(Value::new(map))
     }
@@ -532,7 +535,10 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
                     map.insert(i as i32, val);
                 }
                 Value::Data(s) => {
-                    map.insert(&**s, val);
+                    match std::str::from_utf8(&s) {
+                        Ok(s) => map.insert(s, val),
+                        Err(e) => return Err(self.make_error(&format!("Read meta key utf8 error: {}", e))),
+                    };
                 }
                 _ => {
                     return Err(self.make_error(&format!("MetaMap key must be int or string, got: {}", key.type_name())))

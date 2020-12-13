@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use crate::writer::{WriteResult, Writer, ByteWriter};
 use crate::metamap::MetaKey;
 use crate::reader::{Reader, ByteReader, ReadError};
-use crate::rpcvalue::FromValue;
+use crate::rpcvalue::{FromValue, Map};
 use std::str::Utf8Error;
 
 pub struct CponWriter<'a, W>
@@ -130,9 +130,13 @@ impl<'a, W> CponWriter<'a, W>
         let cnt = self.write_bytes(s.as_bytes())?;
         Ok(self.byte_writer.count() - cnt)
     }
+    fn write_string(&mut self, s: &str) -> WriteResult {
+        self.write_string_bytes(s.as_bytes())
+    }
     fn write_string_bytes(&mut self, bytes: &[u8]) -> WriteResult {
         let cnt = self.byte_writer.count();
         self.write_byte(b'"')?;
+        //let bytes = s.as_bytes();
         for b in bytes {
             match b {
                 0 => {
@@ -167,14 +171,14 @@ impl<'a, W> CponWriter<'a, W>
         self.write_byte(b'"')?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_bytes_hex(&mut self, b: &[u8]) -> WriteResult {
-        let cnt = self.byte_writer.count();
-        self.write_bytes(b"x\"")?;
-        let s = hex::encode(b);
-        self.write_bytes(s.as_bytes())?;
-        self.write_byte(b'"')?;
-        Ok(self.byte_writer.count() - cnt)
-    }
+    // fn write_bytes_hex(&mut self, b: &[u8]) -> WriteResult {
+    //     let cnt = self.byte_writer.count();
+    //     self.write_bytes(b"x\"")?;
+    //     let s = hex::encode(b);
+    //     self.write_bytes(s.as_bytes())?;
+    //     self.write_byte(b'"')?;
+    //     Ok(self.byte_writer.count() - cnt)
+    // }
     fn write_decimal(&mut self, decimal: &Decimal) -> WriteResult {
         let s = decimal.to_cpon_string();
         let cnt = self.write_bytes(s.as_bytes())?;
@@ -206,7 +210,7 @@ impl<'a, W> CponWriter<'a, W>
         self.write_byte(b']')?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_map(&mut self, map: &BTreeMap<Data, RpcValue>) -> WriteResult {
+    fn write_map(&mut self, map: &Map) -> WriteResult {
         let cnt = self.byte_writer.count();
         let is_oneliner = Self::is_oneliner_map(&mut map.iter());
         self.write_byte(b'{')?;
@@ -217,7 +221,7 @@ impl<'a, W> CponWriter<'a, W>
                 self.write_byte(b',')?;
             }
             self.indent_element(is_oneliner, n == 0)?;
-            self.write_string_bytes(k)?;
+            self.write_string(k)?;
             self.write_byte(b':')?;
             self.write(v)?;
             n += 1;
@@ -276,7 +280,7 @@ impl<'a, W> Writer for CponWriter<'a, W>
             self.indent_element(is_oneliner, n == 0)?;
             match &k.key {
                 MetaKey::Str(s) => {
-                    self.write_string_bytes(s)?;
+                    self.write_string(s)?;
                 },
                 MetaKey::Int(i) => {
                     self.write_bytes(i.to_string().as_bytes())?;
@@ -615,7 +619,7 @@ impl<'a, R> CponReader<'a, R>
     }
 
     fn read_map(&mut self) -> Result<Value, ReadError> {
-        let mut map: BTreeMap<Data, RpcValue> = BTreeMap::new();
+        let mut map: Map = Map::new();
         self.get_byte()?; // eat '{'
         loop {
             self.skip_white_insignificant()?;
@@ -628,7 +632,12 @@ impl<'a, R> CponReader<'a, R>
             let skey = match &key {
                 Ok(b) => {
                     match b {
-                        Value::Data(s) => s,
+                        Value::Data(s) => {
+                            match std::str::from_utf8(s) {
+                                Ok(s) => s,
+                                Err(e) => return Err(self.make_error(&format!("Read MetaMap key UTF8 error: {}", e))),
+                            }
+                        },
                         _ => return Err(self.make_error("Read MetaMap key internal error")),
                     }
                 },
@@ -636,7 +645,7 @@ impl<'a, R> CponReader<'a, R>
             };
             self.skip_white_insignificant()?;
             let val = self.read()?;
-            map.insert(*skey.clone(), val);
+            map.insert(skey.to_string(), val);
         }
         return Ok(Value::new(map))
     }
@@ -765,7 +774,10 @@ impl<'a, R> Reader for CponReader<'a, R>
                 map.insert(key.as_i32(), val);
             }
             else {
-                map.insert(key.as_data(), val);
+                match std::str::from_utf8(key.as_data()) {
+                    Ok(s) => map.insert(s, val),
+                    Err(e) => return Err(self.make_error(&format!("Read meta key utf8 error: {}", e))),
+                };
             }
         }
         Ok(Some(map))
@@ -798,6 +810,7 @@ mod test
     use std::collections::BTreeMap;
     use crate::cpon::CponReader;
     use crate::reader::Reader;
+    use crate::rpcvalue::Map;
 
     #[test]
     fn test_read() {
@@ -828,9 +841,9 @@ mod test
         let lst2 = rv.as_list();
         assert_eq!(lst2, &lst1);
 
-        let mut map: BTreeMap<Data, RpcValue> = BTreeMap::new();
-        map.insert(b"foo".to_vec(), RpcValue::new(123));
-        map.insert(b"bar".to_vec(), RpcValue::new("baz"));
+        let mut map: Map = Map::new();
+        map.insert("foo".to_string(), RpcValue::new(123));
+        map.insert("bar".to_string(), RpcValue::new("baz"));
         let cpon = r#"{"foo": 123,"bar":"baz"}"#;
         assert_eq!(RpcValue::from_cpon(cpon).unwrap().as_map(), &map);
 
