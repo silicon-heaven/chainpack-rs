@@ -31,7 +31,7 @@ pub struct MetaMethod {
 }
 
 impl MetaMethod {
-    pub fn list_attributes(&self, mask: u8) -> RpcValue {
+    pub fn dir_attributes(&self, mask: u8) -> RpcValue {
         let mut lst = List::new();
         if (mask & DirAttribute::Signature as u8) != 0 {
             lst.push(RpcValue::new(self.signature as u32));
@@ -53,12 +53,18 @@ impl MetaMethod {
     }
 }
 
+// attributes for 'dir' command
 enum DirAttribute {
     Signature = 1 << 0,
     Flags = 1 << 1,
     AccessGrant = 1 << 2,
     Description = 1 << 3,
 }
+// attributes for 'ls' command
+enum LsAttribute {
+    HasChildren = 1 << 0,
+}
+
 impl Into<u8> for DirAttribute {
     fn into(self) -> u8 {
         return self as u8;
