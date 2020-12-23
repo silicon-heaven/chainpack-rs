@@ -1,11 +1,10 @@
 use std::io::{Write, Read};
-use crate::{RpcValue, MetaMap, Value, Decimal, DateTime, Data};
+use crate::{RpcValue, MetaMap, Value, Decimal, DateTime};
 use std::collections::BTreeMap;
 use crate::writer::{WriteResult, Writer, ByteWriter};
 use crate::metamap::MetaKey;
 use crate::reader::{Reader, ByteReader, ReadError};
 use crate::rpcvalue::{FromValue, Map};
-use std::str::Utf8Error;
 
 pub struct CponWriter<'a, W>
     where W: Write
@@ -805,7 +804,7 @@ impl<'a, R> Reader for CponReader<'a, R>
 #[cfg(test)]
 mod test
 {
-    use crate::{MetaMap, RpcValue, Data};
+    use crate::{MetaMap, RpcValue};
     use crate::Decimal;
     use std::collections::BTreeMap;
     use crate::cpon::CponReader;

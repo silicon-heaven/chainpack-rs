@@ -1,7 +1,7 @@
 use crate::rpcvalue::RpcValue;
 use std::fmt;
 use std::ops::Index;
-use crate::{CponWriter, Writer, Data};
+use crate::{CponWriter, Writer};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MetaKey {
@@ -167,7 +167,6 @@ mod test {
     use crate::metamap::MetaMap;
     use crate::rpcvalue::RpcValue;
     use std::collections::BTreeMap;
-    use crate::Data;
 
     #[test]
     fn metamap_insert() {

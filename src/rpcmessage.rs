@@ -136,7 +136,9 @@ impl RpcMessage {
     pub fn create_request_with_id(rq_id: RqId, shvpath: &str, method: &str, params: Option<RpcValue>) -> Self {
         let mut msg = Self::default();
         msg.set_request_id(rq_id);
-        msg.set_shvpath(shvpath);
+        if !shvpath.is_empty() {
+            msg.set_shvpath(shvpath);
+        }
         msg.set_method(method);
         if let Some(rv) = params {
             msg.set_params(rv);

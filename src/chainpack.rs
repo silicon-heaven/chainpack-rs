@@ -1,4 +1,4 @@
-use crate::{RpcValue, MetaMap, metamap::MetaKey, Decimal, DateTime, WriteResult, Value, Data};
+use crate::{RpcValue, MetaMap, metamap::MetaKey, Decimal, DateTime, WriteResult, Value};
 use std::io;
 use crate::writer::{ByteWriter, Writer};
 use std::io::{Write, Read};
@@ -14,9 +14,9 @@ pub(crate) enum PackingSchema {
     Int,
     Double,
     Bool,
-    Blob,
+    BlobDepricated,
     String,
-    DateTimeEpochDepr, // deprecated
+    DateTimeEpochDepricated, // deprecated
     List,
     Map,
     IMap,
@@ -252,7 +252,7 @@ impl<'a, W> ChainPackWriter<'a, W>
         Ok(self.byte_writer.count() - cnt)
     }
     fn write_data(&mut self, data: &[u8]) -> WriteResult {
-        let cnt = self.write_byte(PackingSchema::Blob as u8)?;
+        let cnt = self.write_byte(PackingSchema::String as u8)?;
         self.write_uint_data(data.len() as u64)?;
         self.write_bytes(data)?;
         Ok(self.byte_writer.count() - cnt)
@@ -409,15 +409,15 @@ impl<'a, R> ChainPackReader<'a, R>
             Err(e) => return Err(self.make_error(&format!("Invalid string, Utf8 error: {}", e))),
         }
     }
-    fn read_blob_data(&mut self) -> Result<Value, ReadError> {
-        let len = self.read_uint_data()?;
-        let mut buff: Vec<u8> = Vec::new();
-        for _ in 0 .. len {
-            let b = self.get_byte()?;
-            buff.push(b);
-        }
-        return Ok(Value::new(buff))
-    }
+    // fn read_blob_data(&mut self) -> Result<Value, ReadError> {
+    //     let len = self.read_uint_data()?;
+    //     let mut buff: Vec<u8> = Vec::new();
+    //     for _ in 0 .. len {
+    //         let b = self.get_byte()?;
+    //         buff.push(b);
+    //     }
+    //     return Ok(Value::new(buff))
+    // }
     fn read_list_data(&mut self) -> Result<Value, ReadError> {
         let mut lst = Vec::new();
         loop {
@@ -580,9 +580,9 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
             } else if b == PackingSchema::CString as u8 {
                 let n = self.read_cstring_data()?;
                 Value::new(n)
-            } else if b == PackingSchema::Blob as u8 {
-                let n = self.read_blob_data()?;
-                Value::new(n)
+            // } else if b == PackingSchema::Blob as u8 {
+            //     let n = self.read_blob_data()?;
+            //     Value::new(n)
             } else if b == PackingSchema::List as u8 {
                 let n = self.read_list_data()?;
                 Value::new(n)

@@ -61,7 +61,7 @@ enum DirAttribute {
     Description = 1 << 3,
 }
 // attributes for 'ls' command
-enum LsAttribute {
+pub enum LsAttribute {
     HasChildren = 1 << 0,
 }
 

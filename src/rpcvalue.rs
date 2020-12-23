@@ -51,7 +51,6 @@ pub enum Value {
 	DateTime(DateTime),
 	Decimal(Decimal),
 	Data(Box<Data>),
-	//Blob(Box<Blob>),
 	List(Box<List>),
 	Map(Box<Map>),
 	IMap(Box<IMap>),
@@ -71,7 +70,6 @@ impl Value {
 			Value::DateTime(_) => "DateTime",
 			Value::Decimal(_) => "Decimal",
 			Value::Data(_) => "Data",
-			//Value::Blob(_) => "Blob",
 			Value::List(_) => "List",
 			Value::Map(_) => "Map",
 			Value::IMap(_) => "IMap",
@@ -116,9 +114,7 @@ macro_rules! from_value {
 }
 
 from_value!(bool, Bool);
-//from_value!(i32, Int);
 from_value!(i64, Int);
-//from_value!(u32, UInt);
 from_value!(u64, UInt);
 from_value!(f64, Double);
 from_value!(DateTime, DateTime);
@@ -134,7 +130,6 @@ macro_rules! from_value_box {
     };
 }
 
-//from_value_box!(Bytes, Bytes);
 from_value_box!(Vec<RpcValue>, List);
 from_value_box!(BTreeMap<String, RpcValue>, Map);
 from_value_box!(BTreeMap<i32, RpcValue>, IMap);
@@ -361,7 +356,7 @@ mod test {
 
 	use chrono::Offset;
 
-	use crate::{DateTime, Data};
+	use crate::{DateTime};
 	use crate::Decimal;
 	use crate::metamap::MetaMap;
 	use crate::rpcvalue::{RpcValue, Value, Map};
