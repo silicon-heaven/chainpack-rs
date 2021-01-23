@@ -1,5 +1,5 @@
 use crate::RpcValue;
-use crate::rpcvalue::List;
+use crate::rpcvalue::{List};
 
 #[derive(Copy, Clone, Debug)]
 pub enum Signature {
@@ -33,7 +33,7 @@ pub struct MetaMethod {
 }
 
 impl MetaMethod {
-    pub fn dir_attributes(&self, mask: u8) -> RpcValue {
+    pub fn to_rpcvalue(&self, mask: u8) -> RpcValue {
         let mut lst = List::new();
         if (mask & DirAttribute::Signature as u8) != 0 {
             lst.push(RpcValue::new(self.signature as u32));

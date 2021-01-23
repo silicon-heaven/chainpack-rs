@@ -199,6 +199,7 @@ macro_rules! rpcvalue_from {
     };
 }
 rpcvalue_from!(());
+rpcvalue_from!(bool);
 rpcvalue_from!(&str);
 rpcvalue_from!(String);
 rpcvalue_from!(Vec<u8>);
