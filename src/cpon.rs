@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use crate::writer::{WriteResult, Writer, ByteWriter};
 use crate::metamap::MetaKey;
 use crate::reader::{Reader, ByteReader, ReadError};
-use crate::rpcvalue::{FromValue, Map};
+use crate::rpcvalue::{Map};
 
 pub struct CponWriter<'a, W>
     where W: Write
@@ -428,7 +428,7 @@ impl<'a, R> CponReader<'a, R>
         }
         let s = std::str::from_utf8(&buff);
         match s {
-            Ok(s) => return Ok(s.chainpack_make_value()),
+            Ok(s) => return Ok(Value::new(s)),
             Err(e) => return Err(self.make_error(&format!("Invalid Map key, Utf8 error: {}", e))),
         }
     }
@@ -453,7 +453,7 @@ impl<'a, R> CponReader<'a, R>
             let b = self.decode_byte(b1)? * 16 + self.decode_byte(b2)?;
             buff.push(b);
         }
-        Ok(buff.chainpack_make_value())
+        Ok(Value::new(buff))
     }
     fn read_int(&mut self, no_signum: bool) -> Result<(u64, bool, i32), ReadError>
     {

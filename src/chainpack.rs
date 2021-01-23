@@ -4,7 +4,7 @@ use crate::writer::{ByteWriter, Writer};
 use std::io::{Write, Read};
 use std::collections::BTreeMap;
 use crate::reader::{Reader, ByteReader, ReadError};
-use crate::rpcvalue::{FromValue, Map, IMap};
+use crate::rpcvalue::{Map, IMap, FromValue};
 
 #[warn(non_camel_case_types)]
 #[allow(dead_code)]

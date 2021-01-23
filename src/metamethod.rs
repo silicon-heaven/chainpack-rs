@@ -1,7 +1,7 @@
 use crate::RpcValue;
 use crate::rpcvalue::List;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum Signature {
     VoidVoid = 0,
     VoidParam,
@@ -9,6 +9,7 @@ pub enum Signature {
     RetParam,
 }
 
+#[derive(Debug)]
 pub enum Flag {
     None = 0,
     IsSignal = 1 << 0,
@@ -22,6 +23,7 @@ impl Into<u8> for Flag {
     }
 }
 
+#[derive(Debug)]
 pub struct MetaMethod {
     pub name: String,
     pub signature: Signature,
@@ -70,3 +72,4 @@ impl Into<u8> for DirAttribute {
         return self as u8;
     }
 }
+

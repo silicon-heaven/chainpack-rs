@@ -14,6 +14,7 @@ use crate::CponWriter;
 use crate::chainpack::ChainPackWriter;
 use crate::chainpack::ChainPackReader;
 use std::str::Utf8Error;
+use std::convert::From;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
@@ -78,7 +79,7 @@ impl Value {
 }
 
 pub trait FromValue {
-	fn chainpack_make_value(self) -> Value;
+    fn chainpack_make_value(self) -> Value;
 }
 
 impl FromValue for Value { fn chainpack_make_value(self) -> Value { self } }
@@ -93,14 +94,14 @@ impl FromValue for u32 { fn chainpack_make_value(self) -> Value { Value::UInt(se
 impl FromValue for isize { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for usize { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
-	fn chainpack_make_value(self) -> Value {
-		Value::DateTime(DateTime::from_epoch_msec(self.timestamp_millis()))
-	}
+    fn chainpack_make_value(self) -> Value {
+        Value::DateTime(DateTime::from_epoch_msec(self.timestamp_millis()))
+    }
 }
 impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
-	fn chainpack_make_value(self) -> Value {
-		Value::DateTime(DateTime::from_datetime(&self))
-	}
+    fn chainpack_make_value(self) -> Value {
+        Value::DateTime(DateTime::from_datetime(&self))
+    }
 }
 
 macro_rules! from_value {
@@ -133,6 +134,84 @@ macro_rules! from_value_box {
 from_value_box!(Vec<RpcValue>, List);
 from_value_box!(BTreeMap<String, RpcValue>, Map);
 from_value_box!(BTreeMap<i32, RpcValue>, IMap);
+/*
+impl From<()> for Value { fn from(item: ()) -> Self { Value::Null } }
+impl From<&str> for Value { fn from(item: &str) -> Self { Value::Data(Box::new(item.as_bytes().to_vec())) } }
+impl From<String> for Value { fn from(item: String) -> Self { Value::Data(Box::new(item.into_bytes())) } }
+impl From<Vec<u8>> for Value { fn from(item: Vec<u8>) -> Self { Value::Data(Box::new(item)) } }
+impl From<&[u8]> for Value { fn from(item: &[u8]) -> Self { Value::Data(Box::new(item.to_vec())) } }
+impl From<&String> for Value { fn from(item: &String) -> Self { Value::Data(Box::new(item.as_bytes().to_vec())) } }
+impl From<i32> for Value  { fn from(item: i32) -> Self { Value::Int(item as i64) } }
+impl From<u32> for Value  { fn from(item: u32) -> Self { Value::UInt(item as u64) } }
+impl From<isize> for Value  { fn from(item: isize) -> Self { Value::Int(item as i64) } }
+impl From<usize> for Value  { fn from(item: usize) -> Self { Value::UInt(item as u64) } }
+impl From<chrono::NaiveDateTime> for Value  {
+	fn from(item: chrono::NaiveDateTime) -> Self {
+		Value::DateTime(DateTime::from_epoch_msec(item.timestamp_millis()))
+	}
+}
+
+impl<Tz: chrono::TimeZone> From<chrono::DateTime<Tz>> for Value {
+	fn from(item: chrono::DateTime<Tz>) -> Self {
+		Value::DateTime(DateTime::from_datetime(&item))
+	}
+}
+ */
+/*
+macro_rules! convert_from_value {
+    ($from:ty, $to:ident) => {
+		impl From<$from> for Value {
+			fn from(item: $from) -> Self {
+				Value::$to(item)
+			}
+		}
+    };
+}
+
+convert_from_value!(bool, Bool);
+convert_from_value!(i64, Int);
+convert_from_value!(u64, UInt);
+convert_from_value!(f64, Double);
+convert_from_value!(DateTime, DateTime);
+convert_from_value!(Decimal, Decimal);
+
+macro_rules! convert_from_value_box {
+    ($from:ty, $to:ident) => {
+		impl From<$from> for RpcValue {
+			fn from(item: $from) -> Self {
+				RpcValue::$to(Box::new(item))
+			}
+		}
+    };
+}
+
+convert_from_value_box!(Vec<RpcValue>, List);
+convert_from_value_box!(BTreeMap<String, RpcValue>, Map);
+convert_from_value_box!(BTreeMap<i32, RpcValue>, IMap);
+*/
+macro_rules! rpcvalue_from {
+    ($from:ty) => {
+		impl From<$from> for RpcValue {
+			fn from(item: $from) -> Self {
+				RpcValue::new(item)
+			}
+		}
+    };
+}
+rpcvalue_from!(());
+rpcvalue_from!(&str);
+rpcvalue_from!(String);
+rpcvalue_from!(Vec<u8>);
+rpcvalue_from!(&[u8]);
+rpcvalue_from!(&String);
+rpcvalue_from!(i32);
+rpcvalue_from!(u32);
+rpcvalue_from!(isize);
+rpcvalue_from!(usize);
+rpcvalue_from!(chrono::NaiveDateTime);
+rpcvalue_from!(List);
+rpcvalue_from!(Map);
+rpcvalue_from!(IMap);
 
 macro_rules! is_xxx {
     ($name:ident, $variant:pat) => {
