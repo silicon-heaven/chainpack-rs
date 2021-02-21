@@ -4,62 +4,81 @@ use std::io::{BufReader, BufRead, BufWriter, stdout};
 use chainpack::{CponReader, ChainPackReader, ChainPackWriter, CponWriter};
 use chainpack::Reader;
 use chainpack::Writer;
-use env_logger::{WriteStyle};
-use chrono::Local;
-use std::io::Write;
-use std::path::Path;
-use env_logger;
+
+use fern::colors::ColoredLevelConfig;
+use colored::Color;
+use colored::Colorize;
+
+fn setup_logging(verbosity: Option<& str>) -> Result<Vec<(String, log::LevelFilter)>, fern::InitError> {
+    let mut ret: Vec<(String, log::LevelFilter)> = Vec::new();
+    let colors = ColoredLevelConfig::new()
+        // use builder methods
+        .error(Color::BrightRed)
+        .warn(Color::BrightMagenta)
+        .info(Color::Cyan)
+        .debug(Color::White)
+        .trace(Color::BrightBlack);
+
+    let mut base_config = fern::Dispatch::new();
+    base_config = match verbosity {
+        None => {
+            ret.push(("".into(), log::LevelFilter::Info));
+            base_config
+                .level(log::LevelFilter::Info)
+        }
+        Some(levels) => {
+            for level_str in levels.split(',') {
+                let parts: Vec<&str> = level_str.split(':').collect();
+                let (target, level_abbr) = if parts.len() == 1 {
+                    (parts[0], "T")
+                } else if parts.len() == 2 {
+                    (parts[0], parts[1])
+                } else {
+                    panic!("Cannot happen");
+                };
+                let level = match level_abbr {
+                    "D" => log::LevelFilter::Debug,
+                    "I" => log::LevelFilter::Info,
+                    "W" => log::LevelFilter::Warn,
+                    "E" => log::LevelFilter::Error,
+                    _ => log::LevelFilter::Trace,
+                };
+                ret.push((target.to_string(), level));
+                if target.is_empty() {
+                    base_config = base_config.level(level);
+                } else {
+                    base_config = base_config.level_for(target.to_string(), level);
+                }
+            }
+            base_config
+        }
+    };
+    let stderr_config = fern::Dispatch::new()
+        .format(move |out, message, record| {
+            let level_color: fern::colors::Color = colors.get_color(&record.level());
+            out.finish(format_args!(
+                "{}{}{} module: {} {}",
+                chrono::Local::now().format("%Y-%m-%dT%H:%M:%S.%3f").to_string().green(),
+                match record.line() {
+                    None => format!("({})", record.target(), ),
+                    Some(line) => format!("({}:{})", record.target(), line),
+                }.yellow(),
+                format!("[{}]", &record.level().as_str()[..1]).color(level_color),
+                record.module_path().unwrap_or(""),
+                format!("{}", message).color(level_color)
+            ))
+        })
+        .chain(io::stderr());
+    base_config
+        //.chain(file_config)
+        .chain(stderr_config)
+        .apply()?;
+    Ok(ret)
+}
 
 fn main() {
-    //env_logger::init();
-    env_logger::builder()
-        .format(|buf, record| {
-            fn short_name(file_path: &str) -> &str {
-                let base_name = Path::new(file_path).file_name();
-                match base_name {
-                    Some(n) => {
-                        match n.to_str() {
-                            Some(s) => s,
-                            None => "",
-                        }
-                    },
-                    None => "",
-                }
-            }
-            let mut style = buf.style();
-            style.set_color(env_logger::fmt::Color::Green);
-            let _ = write!(buf,
-                   "{}",
-                   style.value(Local::now().format("%H:%M:%S.%3f")),
-            );
-            style.set_color(env_logger::fmt::Color::Yellow);
-            let _ = write!(buf, "{}", style.value(&format!("[{}:{}]", short_name(record.file().unwrap_or("")),
-                     record.line().unwrap_or(0))),
-            );
-            match record.level() {
-                log::Level::Error => {style.set_color(env_logger::fmt::Color::Red).set_bold(true);}
-                log::Level::Warn => {style.set_color(env_logger::fmt::Color::Magenta).set_bold(true);}
-                log::Level::Info => {style.set_color(env_logger::fmt::Color::Cyan);}
-                log::Level::Debug => {style.set_color(env_logger::fmt::Color::White);}
-                log::Level::Trace => {style.set_color(env_logger::fmt::Color::White);}
-            }
-            fn level_abbr(level: log::Level) -> char {
-                let s = format!("{}", level).chars().next();
-                match s {
-                    Some(c) => c,
-                    None => ' ',
-                }
-            }
-            writeln!(buf, "{}", style.value(&format!("|{}| {}",
-                                                     level_abbr(record.level()),
-                                                     record.args()))
-            )
-        })
-        .write_style(WriteStyle::Auto)
-        .init();
-
     let matches = App::new("cp2cp")
-        .version("0.0.1")
+        .version("0.0.2")
         .author("Fanda Vacek <fanda.vacek@gmail.com>")
         .about("ChainPack to Cpon converter")
         .arg(Arg::with_name("INPUT")
@@ -81,18 +100,36 @@ fn main() {
             .long("oc")
             .takes_value(false)
             .help("Output is ChainPack"))
+        .arg(Arg::with_name("verbose")
+                .short("v")
+                .long("verbose")
+                .multiple(true)
+                .takes_value(true)
+                .help("Verbosity levels for targets, for example: rpcmsg:W or :T"),
+        )
         .get_matches();
+
+    let o_file = matches.value_of("INPUT");
+    let o_indent = matches.value_of("indent");
+    let o_chainpack_output = matches.is_present("chainpackOutput");
+    let o_cpon_input = matches.is_present("cponInput");
+    let o_verbose = matches.value_of("verbose");
+
+    let levels = setup_logging(o_verbose).expect("failed to initialize logging.");
+    log::info!("=====================================================");
+    log::info!("{} starting up!", std::module_path!());
+    log::info!("=====================================================");
+    log::info!("Verbosity levels: {}", levels.iter()
+        .map(|(target, level)| format!("{}:{}", target, level))
+        .fold(String::new(), |acc, s| if acc.is_empty() { s } else { acc + "," + &s }));
 
     // log::trace!("trace log test");
     // log::debug!("debug log test");
     // log::info!("info log test");
     // log::warn!("warn log test");
     // log::error!("error log test");
-
-    let o_file = matches.value_of("INPUT");
-    let o_indent = matches.value_of("indent");
-    let o_chainpack_output = matches.is_present("chainpackOutput");
-    let o_cpon_input = matches.is_present("cponInput");
+    // log::debug!(target: "rpcmsg", "info with target log test");
+    // return;
 
     let mut reader: Box<dyn BufRead> = match o_file {
         None => Box::new(BufReader::new(io::stdin())),
@@ -108,7 +145,7 @@ fn main() {
     };
     let rv = match res {
         Err(e) => {
-            eprintln!("Parse input error: {:?}", e);
+            log::error!("Parse input error: {:?}", e);
             process::exit(1);
         }
         Ok(rv) => rv,
@@ -129,7 +166,7 @@ fn main() {
         wr.write(&rv)
     };
     if let Err(e) = res {
-        eprintln!("Write output error: {:?}", e);
+        log::error!("Write output error: {:?}", e);
         process::exit(1);
     }
 }
