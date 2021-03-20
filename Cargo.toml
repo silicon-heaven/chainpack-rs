@@ -10,8 +10,8 @@ edition = "2018"
 lazy_static = "1.4.0"
 chrono = "0.4"
 log = "0.4.14"
-clap = "2.33.3"
 fern = { version = "0.6.0", features = ["colored"] }
+clap = "2.33.3"
 colored = "1.9.3"
 
 [[bin]]

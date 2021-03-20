@@ -59,10 +59,7 @@ fn setup_logging(verbosity: Option<& str>) -> Result<Vec<(String, log::LevelFilt
             out.finish(format_args!(
                 "{}{}{} module: {} {}",
                 chrono::Local::now().format("%Y-%m-%dT%H:%M:%S.%3f").to_string().green(),
-                match record.line() {
-                    None => format!("({})", record.target(), ),
-                    Some(line) => format!("({}:{})", record.target(), line),
-                }.yellow(),
+                format!("({}:{})", record.target(), record.line().unwrap_or(0)).yellow(),
                 format!("[{}]", &record.level().as_str()[..1]).color(level_color),
                 record.module_path().unwrap_or(""),
                 format!("{}", message).color(level_color)
@@ -79,7 +76,7 @@ fn setup_logging(verbosity: Option<& str>) -> Result<Vec<(String, log::LevelFilt
 fn main() {
     let matches = App::new("cp2cp")
         .version("0.0.2")
-        .author("Fanda Vacek <fanda.vacek@gmail.com>")
+        .author(env!("CARGO_PKG_AUTHORS"))
         .about("ChainPack to Cpon converter")
         .arg(Arg::with_name("INPUT")
             .help("File to convert")
