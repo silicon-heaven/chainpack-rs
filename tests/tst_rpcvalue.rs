@@ -182,7 +182,7 @@ fn test_cpon_chainpack() {
             let cpon2 = rv2.to_cpon();
             assert_eq!(cpon2, cpon[1]);
             let rv3 = from_cpon(&cpon2);
-            assert_eq!(rv3.as_str().unwrap(), cpon[0]);
+            assert_eq!(rv3.as_str(), cpon[0]);
         }
     }
 }
@@ -217,7 +217,8 @@ fn test_conversions()
         ["-0.00012", "-12e-5"],
         ["-1234567890.", "-1234567890."],
         ["\"foo\"", ""],
-        ["x\"abcd\"", ""],
+        ["b\"ab\\xcd\"", ""],
+        ["x\"41f1\"", "b\"A\\xf1\""],
         ["[]", ""],
         ["[1]", ""],
         ["[1,]", "[1]"],

@@ -228,7 +228,7 @@ pub trait RpcMessageMetaTags {
         let t = self.tag(Tag::ShvPath as i32);
         match t {
             None => None,
-            Some(rv) => rv.as_str().ok(),
+            Some(rv) => Some(rv.as_str()),
         }
     }
     fn set_shvpath(&mut self, shv_path: &str) -> &mut Self::Target {
@@ -238,7 +238,7 @@ pub trait RpcMessageMetaTags {
         let t = self.tag(Tag::Method as i32);
         match t {
             None => None,
-            Some(rv) => rv.as_str().ok(),
+            Some(rv) => Some(rv.as_str()),
         }
     }
     fn set_method(&mut self, method: &str) -> &mut Self::Target {

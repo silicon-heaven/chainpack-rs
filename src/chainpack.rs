@@ -14,7 +14,7 @@ pub(crate) enum PackingSchema {
     Int,
     Double,
     Bool,
-    BlobDepricated,
+    Blob,
     String,
     DateTimeEpochDepricated, // deprecated
     List,
@@ -247,12 +247,13 @@ impl<'a, W> ChainPackWriter<'a, W>
     }
     fn write_string(&mut self, s: &str) -> WriteResult {
         let cnt = self.write_byte(PackingSchema::String as u8)?;
-        self.write_uint_data(s.len() as u64)?;
-        self.write_bytes(s.as_bytes())?;
+        let data = s.as_bytes();
+        self.write_uint_data(data.len() as u64)?;
+        self.write_bytes(data)?;
         Ok(self.byte_writer.count() - cnt)
     }
-    fn write_data(&mut self, data: &[u8]) -> WriteResult {
-        let cnt = self.write_byte(PackingSchema::String as u8)?;
+    fn write_blob(&mut self, data: &[u8]) -> WriteResult {
+        let cnt = self.write_byte(PackingSchema::Blob as u8)?;
         self.write_uint_data(data.len() as u64)?;
         self.write_bytes(data)?;
         Ok(self.byte_writer.count() - cnt)
@@ -295,8 +296,8 @@ impl<'a, W> Writer for ChainPackWriter<'a, W>
             },
             Value::Int(n) => self.write_int(*n)?,
             Value::UInt(n) => self.write_uint(*n)?,
-            Value::Data(s) => self.write_data(s)?,
-            //Value::Blob(b) => self.write_data(b)?,
+            Value::String(s) => self.write_string(s)?,
+            Value::Blob(b) => self.write_blob(b)?,
             Value::Double(n) => self.write_double(*n)?,
             Value::Decimal(d) => self.write_decimal(d)?,
             Value::DateTime(d) => self.write_datetime(d)?,
@@ -409,15 +410,15 @@ impl<'a, R> ChainPackReader<'a, R>
             Err(e) => return Err(self.make_error(&format!("Invalid string, Utf8 error: {}", e))),
         }
     }
-    // fn read_blob_data(&mut self) -> Result<Value, ReadError> {
-    //     let len = self.read_uint_data()?;
-    //     let mut buff: Vec<u8> = Vec::new();
-    //     for _ in 0 .. len {
-    //         let b = self.get_byte()?;
-    //         buff.push(b);
-    //     }
-    //     return Ok(Value::new(buff))
-    // }
+    fn read_blob_data(&mut self) -> Result<Value, ReadError> {
+        let len = self.read_uint_data()?;
+        let mut buff: Vec<u8> = Vec::new();
+        for _ in 0 .. len {
+            let b = self.get_byte()?;
+            buff.push(b);
+        }
+        return Ok(Value::new(buff))
+    }
     fn read_list_data(&mut self) -> Result<Value, ReadError> {
         let mut lst = Vec::new();
         loop {
@@ -441,11 +442,8 @@ impl<'a, R> ChainPackReader<'a, R>
             }
             let k = self.read()?;
             let key;
-            if k.is_data() {
-                match std::str::from_utf8(k.as_data()) {
-                    Ok(s) => key = s,
-                    Err(e) => return Err(self.make_error(&format!("Read meta key utf8 error: {}", e))),
-                };
+            if k.is_string() {
+                key = k.as_str();
             }
             else {
                 return Err(self.make_error(&format!("Invalid Map key '{}'", k)))
@@ -534,11 +532,8 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
                 Value::Int(i) => {
                     map.insert(i as i32, val);
                 }
-                Value::Data(s) => {
-                    match std::str::from_utf8(&s) {
-                        Ok(s) => map.insert(s, val),
-                        Err(e) => return Err(self.make_error(&format!("Read meta key utf8 error: {}", e))),
-                    };
+                Value::String(s) => {
+                    map.insert(&**s.clone(), val);
                 }
                 _ => {
                     return Err(self.make_error(&format!("MetaMap key must be int or string, got: {}", key.type_name())))
@@ -580,9 +575,9 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
             } else if b == PackingSchema::CString as u8 {
                 let n = self.read_cstring_data()?;
                 Value::new(n)
-            // } else if b == PackingSchema::Blob as u8 {
-            //     let n = self.read_blob_data()?;
-            //     Value::new(n)
+            } else if b == PackingSchema::Blob as u8 {
+                let n = self.read_blob_data()?;
+                Value::new(n)
             } else if b == PackingSchema::List as u8 {
                 let n = self.read_list_data()?;
                 Value::new(n)
@@ -599,7 +594,7 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
             } else if b == PackingSchema::Null as u8 {
                 Value::new(())
             } else {
-                return Err(self.make_error(&format!("Invalid char {}", b)))
+                return Err(self.make_error(&format!("Invalid Packing schema: {}", b)))
             };
 
         Ok(v)

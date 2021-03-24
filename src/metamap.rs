@@ -179,9 +179,9 @@ mod test {
         // assert_eq!(123, vv.unwrap().to_i32().unwrap());
 
         mm.insert("foo", RpcValue::new("bar")).insert(123, RpcValue::new("baz"));
-        assert_eq!(mm["foo"].as_str().unwrap(), "bar");
+        assert_eq!(mm["foo"].as_str(), "bar");
         // println!("val: {:?}", mm[123]);
-        assert_eq!(mm[123].as_str().unwrap(), "baz");
+        assert_eq!(mm[123].as_str(), "baz");
 
         let v1 = vec![RpcValue::new("foo"), RpcValue::new("bar"), RpcValue::new("baz")];
         let v2 = v1.clone();

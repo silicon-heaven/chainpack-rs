@@ -13,7 +13,6 @@ use crate::writer::Writer;
 use crate::CponWriter;
 use crate::chainpack::ChainPackWriter;
 use crate::chainpack::ChainPackReader;
-use std::str::Utf8Error;
 use std::convert::From;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
@@ -36,7 +35,7 @@ lazy_static! {
     static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
 }
 
-pub type Data = Vec<u8>;
+pub type Blob = Vec<u8>;
 pub type List = Vec<RpcValue>;
 pub type Map = BTreeMap<String, RpcValue>;
 pub type IMap = BTreeMap<i32, RpcValue>;
@@ -51,7 +50,8 @@ pub enum Value {
 	Bool(bool),
 	DateTime(DateTime),
 	Decimal(Decimal),
-	Data(Box<Data>),
+	String(Box<String>),
+	Blob(Box<Blob>),
 	List(Box<List>),
 	Map(Box<Map>),
 	IMap(Box<IMap>),
@@ -70,7 +70,8 @@ impl Value {
 			Value::Bool(_) => "Bool",
 			Value::DateTime(_) => "DateTime",
 			Value::Decimal(_) => "Decimal",
-			Value::Data(_) => "Data",
+			Value::String(_) => "String",
+			Value::Blob(_) => "Blob",
 			Value::List(_) => "List",
 			Value::Map(_) => "Map",
 			Value::IMap(_) => "IMap",
@@ -84,11 +85,11 @@ pub trait FromValue {
 
 impl FromValue for Value { fn chainpack_make_value(self) -> Value { self } }
 impl FromValue for () { fn chainpack_make_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.as_bytes().to_vec())) } }
-impl FromValue for String { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.into_bytes())) } }
-impl FromValue for Vec<u8> { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self)) } }
-impl FromValue for &[u8] { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.to_vec())) } }
-impl FromValue for &String { fn chainpack_make_value(self) -> Value { Value::Data(Box::new(self.as_bytes().to_vec())) } }
+impl FromValue for &str { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.to_string())) } }
+impl FromValue for String { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self)) } }
+impl FromValue for &String { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.clone())) } }
+impl FromValue for Vec<u8> { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self)) } }
+impl FromValue for &[u8] { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self.to_vec())) } }
 impl FromValue for i32 { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for u32 { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for isize { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
@@ -305,7 +306,8 @@ impl RpcValue {
 	is_xxx!(is_null, Value::Null);
 	is_xxx!(is_bool, Value::Bool(_));
 	is_xxx!(is_int, Value::Int(_));
-	is_xxx!(is_data, Value::Data(_));
+	is_xxx!(is_string, Value::String(_));
+	is_xxx!(is_blob, Value::Blob(_));
 	is_xxx!(is_list, Value::List(_));
 	is_xxx!(is_map, Value::Map(_));
 	is_xxx!(is_imap, Value::IMap(_));
@@ -353,16 +355,22 @@ impl RpcValue {
 			_ => Decimal::new(0, 0),
 		}
 	}
-	pub fn as_str(&self) -> Result<&str, Utf8Error> {
+	// pub fn as_str(&self) -> Result<&str, Utf8Error> {
+	// 	match &self.value {
+	// 		Value::String(b) => std::str::from_utf8(b),
+	// 		_ => std::str::from_utf8(EMPTY_BYTES_REF),
+	// 	}
+	// }
+	pub fn as_blob(&self) -> &[u8] {
 		match &self.value {
-			Value::Data(b) => std::str::from_utf8(b),
-			_ => std::str::from_utf8(EMPTY_BYTES_REF),
+			Value::Blob(b) => b,
+			_ => EMPTY_BYTES_REF,
 		}
 	}
-	pub fn as_data(&self) -> &[u8] {
+	pub fn as_str(&self) -> &str {
 		match &self.value {
-			Value::Data(b) => b,
-			_ => EMPTY_BYTES_REF,
+			Value::String(b) => b,
+			_ => EMPTY_STR_REF,
 		}
 	}
 	pub fn as_list(&self) -> &Vec<RpcValue> {
@@ -393,7 +401,10 @@ impl RpcValue {
 		}
 		match String::from_utf8(buff) {
 			Ok(s) => s,
-			Err(_) => String::new(),
+			Err(e) => {
+				log::warn!("to_cpon from UTF8 error: {}", e);
+				String::new()
+			},
 		}
 	}
 	pub fn to_chainpack(&self) -> Vec<u8> {
@@ -472,9 +483,9 @@ mod test {
 		let rv = RpcValue::new(true);
 		assert_eq!(rv.as_bool(), true);
 		let rv = RpcValue::new("foo");
-		assert_eq!(rv.as_str().unwrap(), "foo");
-		let rv = RpcValue::new(&"bar".to_string());
-		assert_eq!(rv.as_data(), b"bar");
+		assert_eq!(rv.as_str(), "foo");
+		let rv = RpcValue::new(&b"bar"[..]);
+		assert_eq!(rv.as_blob(), b"bar");
 		let rv = RpcValue::new(123);
 		assert_eq!(rv.as_i32(), 123);
 		let rv = RpcValue::new(12.3);

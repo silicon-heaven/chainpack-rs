@@ -130,12 +130,49 @@ impl<'a, W> CponWriter<'a, W>
         Ok(self.byte_writer.count() - cnt)
     }
     fn write_string(&mut self, s: &str) -> WriteResult {
-        self.write_string_bytes(s.as_bytes())
-    }
-    fn write_string_bytes(&mut self, bytes: &[u8]) -> WriteResult {
         let cnt = self.byte_writer.count();
         self.write_byte(b'"')?;
         //let bytes = s.as_bytes();
+        for c in s.chars() {
+            match c {
+                '\0' => {
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'0')?;
+                }
+                '\\' => {
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'\\')?;
+                }
+                '\t' => {
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b't')?;
+                }
+                '\r' => {
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'r')?;
+                }
+                '\n' => {
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'n')?;
+                }
+                '"' => {
+                    self.write_byte(b'\\')?;
+                    self.write_byte(b'"')?;
+                }
+                _ => {
+                    let mut b = [0; 4];
+                    let bytes = c.encode_utf8(&mut b);
+                    self.write_bytes(bytes.as_bytes())?;
+                }
+            }
+        }
+        self.write_byte(b'"')?;
+        Ok(self.byte_writer.count() - cnt)
+    }
+    /// Escape blob to be UTF8 compatible
+    fn write_blob(&mut self, bytes: &[u8]) -> WriteResult {
+        let cnt = self.byte_writer.count();
+        self.write_bytes(b"b\"")?;
         for b in bytes {
             match b {
                 0 => {
@@ -163,7 +200,21 @@ impl<'a, W> CponWriter<'a, W>
                     self.write_byte(b'"')?;
                 }
                 _ => {
-                    self.write_byte(*b)?;
+                    if *b >= 128 {
+                        self.write_bytes(b"\\x")?;
+                        fn to_hex(b: u8) -> u8 {
+                            if b < 10 {
+                                return b'0' + b;
+                            }
+                            else {
+                                return b'a' + (b - 10);
+                            }
+                        }
+                        self.write_byte(to_hex(*b / 16))?;
+                        self.write_byte(to_hex(*b % 16))?;
+                    } else {
+                        self.write_byte(*b)?;
+                    }
                 }
             }
         }
@@ -308,8 +359,8 @@ impl<'a, W> Writer for CponWriter<'a, W>
                 self.write_uint(*n)?;
                 self.write_byte(b'u')
             },
-            Value::Data(s) => self.write_string_bytes(s),
-            //Value::Bytes(b) => self.write_bytes(b),
+            Value::String(s) => self.write_string(s),
+            Value::Blob(b) => self.write_blob(b),
             Value::Double(n) => self.write_double(*n),
             Value::Decimal(d) => self.write_decimal(d),
             Value::DateTime(d) => self.write_datetime(d),
@@ -429,7 +480,7 @@ impl<'a, R> CponReader<'a, R>
         let s = std::str::from_utf8(&buff);
         match s {
             Ok(s) => return Ok(Value::new(s)),
-            Err(e) => return Err(self.make_error(&format!("Invalid Map key, Utf8 error: {}", e))),
+            Err(e) => return Err(self.make_error(&format!("Invalid String, Utf8 error: {}", e))),
         }
     }
     fn decode_byte(&self, b: u8) -> Result<u8, ReadError> {
@@ -440,8 +491,45 @@ impl<'a, R> CponReader<'a, R>
             c => Err(self.make_error(&format!("Illegal hex encoding character: {}", c))),
         }
     }
-    fn read_blob(&mut self) -> Result<Value, ReadError> {
+    fn read_blob_esc(&mut self) -> Result<Value, ReadError> {
         let mut buff: Vec<u8> = Vec::new();
+        self.get_byte()?; // eat b
+        self.get_byte()?; // eat "
+        loop {
+            let b = self.get_byte()?;
+            match &b {
+                b'\\' => {
+                    let b = self.get_byte()?;
+                    match &b {
+                        b'\\' => buff.push(b'\\'),
+                        b'"' => buff.push(b'"'),
+                        b'n' => buff.push(b'\n'),
+                        b'r' => buff.push(b'\r'),
+                        b't' => buff.push(b'\t'),
+                        b'0' => buff.push(b'\0'),
+                        b'x' => {
+                            let hi = self.get_byte()?;
+                            let lo = self.get_byte()?;
+                            let b = self.decode_byte(hi)? * 16 + self.decode_byte(lo)?;
+                            buff.push(b)
+                        },
+                        _ => buff.push(b),
+                    }
+                }
+                b'"' => {
+                    // end of string
+                    break;
+                }
+                _ => {
+                    buff.push(b);
+                }
+            }
+        }
+        Ok(Value::new(buff))
+    }
+    fn read_blob_hex(&mut self) -> Result<Value, ReadError> {
+        let mut buff: Vec<u8> = Vec::new();
+        self.get_byte()?; // eat x
         self.get_byte()?; // eat "
         loop {
             let b1 = self.get_byte()?;
@@ -631,11 +719,8 @@ impl<'a, R> CponReader<'a, R>
             let skey = match &key {
                 Ok(b) => {
                     match b {
-                        Value::Data(s) => {
-                            match std::str::from_utf8(s) {
-                                Ok(s) => s,
-                                Err(e) => return Err(self.make_error(&format!("Read MetaMap key UTF8 error: {}", e))),
-                            }
+                        Value::String(s) => {
+                            s
                         },
                         _ => return Err(self.make_error("Read MetaMap key internal error")),
                     }
@@ -673,14 +758,10 @@ impl<'a, R> CponReader<'a, R>
     fn read_datetime(&mut self) -> Result<Value, ReadError> {
         self.get_byte()?; // eat 'd'
         let v = self.read_string()?;
-        if let Value::Data(sdata) = v {
+        if let Value::String(sdata) = v {
             const PATTERN: &'static str = "2020-02-03T11:59:43";
             if sdata.len() >= PATTERN.len() {
-                let s;
-                match std::str::from_utf8(&sdata) {
-                    Ok(ss) => s = ss,
-                    Err(e) => return Err(self.make_error(&format!("DateTime '{:?}' UTF8 error: {}", sdata, e))),
-                }
+                let s = &sdata[..];
                 let naive_str = &s[..PATTERN.len()];
                 if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(naive_str, "%Y-%m-%dT%H:%M:%S") {
                     let mut msec = 0;
@@ -773,10 +854,7 @@ impl<'a, R> Reader for CponReader<'a, R>
                 map.insert(key.as_i32(), val);
             }
             else {
-                match std::str::from_utf8(key.as_data()) {
-                    Ok(s) => map.insert(s, val),
-                    Err(e) => return Err(self.make_error(&format!("Read meta key utf8 error: {}", e))),
-                };
+                map.insert(key.as_str(), val);
             }
         }
         Ok(Some(map))
@@ -787,7 +865,8 @@ impl<'a, R> Reader for CponReader<'a, R>
         let v = match &b {
             b'0' ..= b'9' | b'+' | b'-' => self.read_number(),
             b'"' => self.read_string(),
-            b'x' => self.read_blob(),
+            b'b' => self.read_blob_esc(),
+            b'x' => self.read_blob_hex(),
             b'[' => self.read_list(),
             b'{' => self.read_map(),
             b'i' => self.read_imap(),
@@ -829,10 +908,10 @@ mod test
         assert_eq!(RpcValue::from_cpon("0e0").unwrap().as_decimal(), Decimal::new(0, 0));
         assert_eq!(RpcValue::from_cpon("0.123e3").unwrap().as_decimal(), Decimal::new(123, 0));
         assert_eq!(RpcValue::from_cpon("1000000.").unwrap().as_decimal(), Decimal::new(1000000, 0));
-        assert_eq!(RpcValue::from_cpon(r#""foo""#).unwrap().as_data(), b"foo");
-        assert_eq!(RpcValue::from_cpon(r#""ěščřžýáí""#).unwrap().as_str().unwrap(), "ěščřžýáí");
-        assert_eq!(RpcValue::from_cpon("\"foo\tbar\nbaz\"").unwrap().as_data(), b"foo\tbar\nbaz");
-        assert_eq!(RpcValue::from_cpon(r#""foo\"bar""#).unwrap().as_str().unwrap(), r#"foo"bar"#);
+        assert_eq!(RpcValue::from_cpon(r#""foo""#).unwrap().as_str(), "foo");
+        assert_eq!(RpcValue::from_cpon(r#""ěščřžýáí""#).unwrap().as_str(), "ěščřžýáí");
+        assert_eq!(RpcValue::from_cpon("b\"foo\tbar\nbaz\"").unwrap().as_blob(), b"foo\tbar\nbaz");
+        assert_eq!(RpcValue::from_cpon(r#""foo\"bar""#).unwrap().as_str(), r#"foo"bar"#);
 
         let lst1 = vec![RpcValue::new(123), RpcValue::new("foo")];
         let cpon = r#"[123 , "foo"]"#;
