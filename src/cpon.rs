@@ -532,7 +532,13 @@ impl<'a, R> CponReader<'a, R>
         self.get_byte()?; // eat x
         self.get_byte()?; // eat "
         loop {
-            let b1 = self.get_byte()?;
+            let mut b1;
+            loop {
+                b1 = self.get_byte()?;
+                if b1 > b' ' {
+                    break;
+                }
+            }
             if b1 == b'"' {
                 // end of blob
                 break;
