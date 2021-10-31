@@ -339,7 +339,7 @@ pub struct RpcError(IMap);
 
 impl RpcError {
     pub fn new(code: RpcErrorCode, msg: &str) -> Self {
-        enum Key {KeyCode = 1, KeyMessage};
+        enum Key {KeyCode = 1, KeyMessage}
         let mut m = IMap::new();
         m.insert(Key::KeyCode as i32, RpcValue::new(code as i64));
         if msg.len() > 0 {

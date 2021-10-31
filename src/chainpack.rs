@@ -112,7 +112,7 @@ impl<'a, W> ChainPackWriter<'a, W>
     fn write_uint_data_helper(&mut self, number: u64, bit_len: u32) -> WriteResult {
         const BYTE_CNT_MAX: u32 = 32;
         let byte_cnt = Self::bytes_needed(bit_len);
-        assert!(byte_cnt <= BYTE_CNT_MAX, format!("Max int byte size {} exceeded", BYTE_CNT_MAX));
+        assert!(byte_cnt <= BYTE_CNT_MAX, "Max int byte size {} exceeded", BYTE_CNT_MAX);
         let mut bytes: [u8; BYTE_CNT_MAX as usize] = [0; BYTE_CNT_MAX as usize];
         let mut num = number;
         for i in (0 .. byte_cnt).rev() {

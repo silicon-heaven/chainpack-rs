@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::io::Read;
 use crate::{MetaMap, RpcValue};
 use crate::rpcvalue::Value;
@@ -8,11 +9,14 @@ pub struct ReadError {
     pub line: usize,
     pub col: usize,
 }
-//impl ReadError {
-//    fn new(msg: String, line: usize, col: usize) -> ReadError {
-//        ReadError { msg, line, col }
-//    }
-//}
+
+impl Display for ReadError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ReadError: {}, line: {}, col: {}", self.msg, self.line, self.col)
+    }
+}
+
+impl std::error::Error for ReadError {}
 
 pub(crate) struct ByteReader<'a, R>
 {

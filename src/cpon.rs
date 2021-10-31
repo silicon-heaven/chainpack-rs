@@ -639,7 +639,7 @@ impl<'a, R> CponReader<'a, R>
         }
         mantisa = n;
         #[derive(PartialEq)]
-        enum State { Mantisa, Decimals,  };
+        enum State { Mantisa, Decimals,  }
         let mut state = State::Mantisa;
         loop {
             let b = self.peek_byte();
