@@ -1,6 +1,7 @@
 use std::{process, io, fs};
 use std::io::{BufReader, BufRead, BufWriter, stdout};
 use std::path::PathBuf;
+use flexi_logger::Logger;
 use chainpack::{CponReader, ChainPackReader, ChainPackWriter, CponWriter};
 use chainpack::Reader;
 use chainpack::Writer;
@@ -15,24 +16,22 @@ struct Cli {
     cpon_input: bool,
     #[structopt(long = "--oc", help = "ChainPack output")]
     chainpack_output: bool,
-    #[structopt(short = "-v", long = "--verbose", help = "Log levels for targets, for example: rpcmsg:W or :T")]
-    verbosity: Vec<String>,
-    #[structopt(short, long, help = "Log levels for modules, for example: client:W or :T, default is :W if not specified")]
-    debug: Vec<String>,
     /// File to process
     #[structopt(name = "FILE", parse(from_os_str))]
     file: Option<PathBuf>,
 }
 
 fn main() {
+
+    Logger::try_with_env().unwrap().start().unwrap();
+
     // Parse command line arguments
     let cli = Cli::from_args();
 
-    let (_log_handle, verbosity_string) = shvlog::init(&cli.debug, &cli.verbosity).unwrap();
-    log::info!("=====================================================");
-    log::info!("{} starting up!", std::module_path!());
-    log::info!("=====================================================");
-    log::info!("Verbosity levels: {}", verbosity_string);
+    //log::info!("=====================================================");
+    //log::info!("{} starting up!", std::module_path!());
+    //log::info!("=====================================================");
+    //log::info!("Verbosity levels: {}", verbosity_string);
 
     let mut reader: Box<dyn BufRead> = match cli.file {
         None => Box::new(BufReader::new(io::stdin())),

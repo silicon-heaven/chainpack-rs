@@ -11,8 +11,7 @@ lazy_static = "1.4"
 chrono = "0.4"
 log = "0.4"
 structopt = "0.3"
-
-shvlog = { path = "../shvlog" }
+flexi_logger = { version = "0.19", features = ["colors"] }
 
 [[bin]]
 name = "cp2cp"
