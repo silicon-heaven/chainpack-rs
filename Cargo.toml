@@ -12,6 +12,7 @@ chrono = "0.4"
 log = "0.4"
 structopt = "0.3"
 flexi_logger = { version = "0.19", features = ["colors"] }
+bytes = "0.6"
 
 [[bin]]
 name = "cp2cp"
