@@ -20,6 +20,12 @@ impl Decimal {
         let e = self.0 as i8;
         (m, e)
     }
+    pub fn mantissa(&self) -> i64 {
+        self.decode().0
+    }
+    pub fn exponent(&self) -> i8 {
+        self.decode().1
+    }
     pub fn to_cpon_string(&self) -> String {
         let mut neg = false;
         let (mut mantisa, exponent) = self.decode();

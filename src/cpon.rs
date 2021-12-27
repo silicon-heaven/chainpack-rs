@@ -765,49 +765,14 @@ impl<'a, R> CponReader<'a, R>
         self.get_byte()?; // eat 'd'
         let v = self.read_string()?;
         if let Value::String(sdata) = v {
-            const PATTERN: &'static str = "2020-02-03T11:59:43";
-            if sdata.len() >= PATTERN.len() {
-                let s = &sdata[..];
-                let naive_str = &s[..PATTERN.len()];
-                if let Ok(ndt) = chrono::NaiveDateTime::parse_from_str(naive_str, "%Y-%m-%dT%H:%M:%S") {
-                    let mut msec = 0;
-                    let mut offset = 0;
-                    let mut rest = &s[PATTERN.len()..];
-                    if rest.len() > 0 && rest.as_bytes()[0] == b'.' {
-                        rest = &rest[1..];
-                        if rest.len() >= 3 {
-                            if let Ok(ms) = rest[..3].parse::<i32>() {
-                                msec = ms;
-                                rest = &rest[3..];
-                            } else {
-                                return Err(self.make_error(&format!("Invalid DateTime msec part: '{}", rest)))
-                            }
-                        }
-                    }
-                    if rest.len() > 0 {
-                        if rest.len() == 1 && rest.as_bytes()[0] == b'Z' {
-                        } else if rest.len() == 3 {
-                            if let Ok(hrs) = rest.parse::<i32>() {
-                                offset = 60 * 60 * hrs;
-                            } else {
-                                return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
-                            }
-                        } else if rest.len() == 5 {
-                            if let Ok(hrs) = rest.parse::<i32>() {
-                                offset = 60 * (60 * (hrs / 100) + (hrs % 100));
-                            } else {
-                                return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
-                            }
-                        } else {
-                            return Err(self.make_error(&format!("Invalid DateTime TZ part: '{}", rest)))
-                        }
-                    }
-
-                    let dt = DateTime::from_epoch_msec_tz((ndt.timestamp() - (offset as i64)) * 1000 + (msec as i64), offset);
-                    return Ok(Value::new(dt))
+            match DateTime::from_iso_str(&sdata) {
+                Ok(dt) => {
+                    return Ok(Value::new(dt));
+                }
+                Err(err) => {
+                    return Err(self.make_error(&err))
                 }
             }
-            return Err(self.make_error(&format!("Invalid DateTime: '{:?}", sdata)))
         }
         return Err(self.make_error("Invalid DateTime"))
     }
@@ -919,21 +884,21 @@ mod test
         assert_eq!(RpcValue::from_cpon("b\"foo\tbar\nbaz\"").unwrap().as_blob(), b"foo\tbar\nbaz");
         assert_eq!(RpcValue::from_cpon(r#""foo\"bar""#).unwrap().as_str(), r#"foo"bar"#);
 
-        let lst1 = vec![RpcValue::new(123), RpcValue::new("foo")];
+        let lst1 = vec![RpcValue::from(123), RpcValue::from("foo")];
         let cpon = r#"[123 , "foo"]"#;
         let rv = RpcValue::from_cpon(cpon).unwrap();
         let lst2 = rv.as_list();
         assert_eq!(lst2, &lst1);
 
         let mut map: Map = Map::new();
-        map.insert("foo".to_string(), RpcValue::new(123));
-        map.insert("bar".to_string(), RpcValue::new("baz"));
+        map.insert("foo".to_string(), RpcValue::from(123));
+        map.insert("bar".to_string(), RpcValue::from("baz"));
         let cpon = r#"{"foo": 123,"bar":"baz"}"#;
         assert_eq!(RpcValue::from_cpon(cpon).unwrap().as_map(), &map);
 
         let mut map: BTreeMap<i32, RpcValue> = BTreeMap::new();
-        map.insert(1, RpcValue::new(123));
-        map.insert(2, RpcValue::new("baz"));
+        map.insert(1, RpcValue::from(123));
+        map.insert(2, RpcValue::from("baz"));
         let cpon = r#"i{1: 123,2:"baz"}"#;
         assert_eq!(RpcValue::from_cpon(cpon).unwrap().as_imap(), &map);
 
@@ -942,8 +907,8 @@ mod test
         let mut rd = CponReader::new(&mut b);
         let mm1 = rd.try_read_meta().unwrap().unwrap();
         let mut mm2 = MetaMap::new();
-        mm2.insert(1, RpcValue::new(123));
-        mm2.insert(2, RpcValue::new("baz"));
+        mm2.insert(1, RpcValue::from(123));
+        mm2.insert(2, RpcValue::from("baz"));
         assert_eq!(mm1, mm2);
 
         //let cpon1 = r#"<1:123,2:"foo","bar":"baz">42"#;

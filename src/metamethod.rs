@@ -36,22 +36,22 @@ impl MetaMethod {
     pub fn to_rpcvalue(&self, mask: u8) -> RpcValue {
         let mut lst = List::new();
         if (mask & DirAttribute::Signature as u8) != 0 {
-            lst.push(RpcValue::new(self.signature as u32));
+            lst.push(RpcValue::from(self.signature as u32));
         }
         if (mask & DirAttribute::Flags as u8) != 0 {
-            lst.push(RpcValue::new(self.flags as u32));
+            lst.push(RpcValue::from(self.flags as u32));
         }
         if (mask & DirAttribute::AccessGrant as u8) != 0 {
             lst.push(self.access_grant.clone());
         }
         if (mask & DirAttribute::Description as u8) != 0 {
-            lst.push(RpcValue::new(&self.description));
+            lst.push(RpcValue::from(&self.description));
         }
         if lst.is_empty() {
-            return RpcValue::new(&self.name);
+            return RpcValue::from(&self.name);
         }
-        lst.insert(0, RpcValue::new(&self.name));
-        return RpcValue::new(lst);
+        lst.insert(0, RpcValue::from(&self.name));
+        return RpcValue::from(lst);
     }
 }
 

@@ -3,7 +3,7 @@ pub use decimal::Decimal;
 pub use metamap::MetaMap;
 pub use reader::{Reader, ReadError, ReadResult};
 pub use rpcmessage::{RpcMessage, RpcMessageMetaTags};
-pub use rpcvalue::{Blob, RpcValue};
+pub use rpcvalue::{Blob, List, Map, RpcValue};
 pub use rpcvalue::Value;
 pub use writer::{Writer, WriteResult};
 

@@ -4,7 +4,7 @@ use crate::writer::{ByteWriter, Writer};
 use std::io::{Write, Read};
 use std::collections::BTreeMap;
 use crate::reader::{Reader, ByteReader, ReadError};
-use crate::rpcvalue::{Map, IMap, FromValue};
+use crate::rpcvalue::{Map, IMap};
 
 #[warn(non_camel_case_types)]
 #[allow(dead_code)]
@@ -393,7 +393,7 @@ impl<'a, R> ChainPackReader<'a, R>
         }
         let s = std::str::from_utf8(&buff);
         match s {
-            Ok(s) => return Ok(s.chainpack_make_value()),
+            Ok(s) => return Ok(Value::new(s)),
             Err(e) => return Err(self.make_error(&format!("Invalid string, Utf8 error: {}", e))),
         }
     }

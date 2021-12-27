@@ -172,36 +172,36 @@ mod test {
     fn metamap_insert() {
         let mut mm = MetaMap::new();
 
-        mm.insert(123, RpcValue::new(1.1));
+        mm.insert(123, RpcValue::from(1.1));
         assert_eq!(mm[123].as_f64(), 1.1);
-        // let vv = mm.value(1234, Some(&RpcValue::new(123)));
+        // let vv = mm.value(1234, Some(&RpcValue::from(123)));
         // println!("inserted and retrieved: {:?}", vv);
         // assert_eq!(123, vv.unwrap().to_i32().unwrap());
 
-        mm.insert("foo", RpcValue::new("bar")).insert(123, RpcValue::new("baz"));
+        mm.insert("foo", RpcValue::from("bar")).insert(123, RpcValue::from("baz"));
         assert_eq!(mm["foo"].as_str(), "bar");
         // println!("val: {:?}", mm[123]);
         assert_eq!(mm[123].as_str(), "baz");
 
-        let v1 = vec![RpcValue::new("foo"), RpcValue::new("bar"), RpcValue::new("baz")];
+        let v1 = vec![RpcValue::from("foo"), RpcValue::from("bar"), RpcValue::from("baz")];
         let v2 = v1.clone();
-        mm.insert("list", RpcValue::new(v1));
+        mm.insert("list", RpcValue::from(v1));
         assert_eq!(mm["list"].as_list(), &v2);
 
         let mut v1: BTreeMap<i32, RpcValue> = BTreeMap::new();
-        v1.insert(1, RpcValue::new("foo"));
-        v1.insert(2, RpcValue::new("bar"));
-        v1.insert(3, RpcValue::new("baz"));
+        v1.insert(1, RpcValue::from("foo"));
+        v1.insert(2, RpcValue::from("bar"));
+        v1.insert(3, RpcValue::from("baz"));
         let v2 = v1.clone();
-        mm.insert("imap", RpcValue::new(v1));
+        mm.insert("imap", RpcValue::from(v1));
         assert_eq!(mm["imap"].as_imap(), &v2);
 
         let mut v1: BTreeMap<String, RpcValue> = BTreeMap::new();
-        v1.insert("a".to_string(), RpcValue::new("foo"));
-        v1.insert("b".to_string(), RpcValue::new("bar"));
-        v1.insert("c".to_string(), RpcValue::new("baz"));
+        v1.insert("a".to_string(), RpcValue::from("foo"));
+        v1.insert("b".to_string(), RpcValue::from("bar"));
+        v1.insert("c".to_string(), RpcValue::from("baz"));
         let v2 = v1.clone();
-        mm.insert("map", RpcValue::new(v1));
+        mm.insert("map", RpcValue::from(v1));
         assert_eq!(mm["map"].as_map(), &v2);
 
     }
@@ -217,7 +217,7 @@ mod test {
     #[should_panic]
     fn metamap_invalid_int_key() {
         let mut mm = MetaMap::new();
-        mm.insert(123, RpcValue::new(()));
+        mm.insert(123, RpcValue::from(()));
         let _a = &mm[1234];
     }
     */

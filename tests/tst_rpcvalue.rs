@@ -1,14 +1,6 @@
 use chainpack::{RpcValue, Decimal};
 use std::mem::size_of;
 
-/// Setup function that is only run once, even if called multiple times.
-fn init_log() {
-    let _ = env_logger::builder().is_test(true).try_init();
-    // INIT.call_once(|| {
-    //     env_logger::init();
-    // });
-}
-
 fn from_chainpack(data: &[u8]) -> RpcValue {
     return RpcValue::from_chainpack(data).unwrap()
 }
@@ -27,22 +19,21 @@ fn to_cpon(rv: &RpcValue) -> String {
 
 #[test]
 fn test_cpon_chainpack() {
-    init_log();
     log::info!("------------- NULL ");
     {
-        let rv = RpcValue::new(());
+        let rv = RpcValue::from(());
         assert_eq!(to_cpon(&rv), "null");
         //assert_eq!(to_chainpack(&rv), [PackingSchema::Null as u8]);
     }
     log::info!("------------- BOOL ");
     for b in [true, false].iter() {
-        let rv = RpcValue::new(*b);
+        let rv = RpcValue::from(*b);
         assert_eq!(to_cpon(&rv), (if *b == true { "true" } else { "false" }));
         //assert_eq!(to_chainpack(&rv), (if *b == true { [PackingSchema::TRUE as u8] } else { [PackingSchema::FALSE as u8] }));
     }
     log::info!("------------- tiny uint ");
     for n in 0..64_u8 {
-        let rv = RpcValue::new(n as u64);
+        let rv = RpcValue::from(n as u64);
         assert_eq!(to_cpon(&rv), (n.to_string() + "u"));
         assert_eq!(to_chainpack(&rv), [n]);
     }
@@ -50,7 +41,7 @@ fn test_cpon_chainpack() {
     for i in 0..size_of::<u64>() {
         for j in 0..3 {
             let n = (1_u64 << (i * 8 + j * 3 + 1)) + 1;
-            let rv = RpcValue::new(n);
+            let rv = RpcValue::from(n);
             let cpon = to_cpon(&rv);
             let cpk = to_chainpack(&rv);
             log::debug!("\t cpon: {}", cpon);
@@ -64,7 +55,7 @@ fn test_cpon_chainpack() {
     }
     log::info!("------------- tiny int ");
     for n in 0 .. 64_i8 {
-        let rv = RpcValue::new(n as i64);
+        let rv = RpcValue::from(n as i64);
         assert_eq!(to_cpon(&rv), n.to_string());
         assert_eq!(to_chainpack(&rv), [n as u8 + 64]);
     }
@@ -73,7 +64,7 @@ fn test_cpon_chainpack() {
         for i in 0..size_of::<i64>() {
             for j in 0 .. 3 {
                 let n = ((*sig * 1_i64) << (i*8 + j*2+2)) + 1;
-                let rv = RpcValue::new(n);
+                let rv = RpcValue::from(n);
                 let cpon = to_cpon(&rv);
                 let cpk = to_chainpack(&rv);
                 log::debug!("\t n: {} cpon: {}", n, cpon);
@@ -95,7 +86,7 @@ fn test_cpon_chainpack() {
             let n = Decimal::new(mant, exp);
             //let (m,e) = n.decode();
             log::debug!("\t mant: {} exp: {}, n: {}", mant, exp, n.to_cpon_string());
-            let rv = RpcValue::new(n.clone());
+            let rv = RpcValue::from(n.clone());
             let cpon = to_cpon(&rv);
             let cpk = to_chainpack(&rv);
             let rv_cpon = from_cpon(&cpon);
@@ -114,7 +105,7 @@ fn test_cpon_chainpack() {
         let step = (n_max - n_min) / 100.1;
         let mut n = n_min;
         while n < n_max {
-            let rv = RpcValue::new(n);
+            let rv = RpcValue::from(n);
             let _ = to_cpon(&rv);
             let cpk = to_chainpack(&rv);
             let rv_cpk = from_chainpack(&cpk);
@@ -127,7 +118,7 @@ fn test_cpon_chainpack() {
         let step = -1.23456789e-10;
         let mut n = -f64::MAX / 10.;
         while n != 0. {
-            let rv = RpcValue::new(n);
+            let rv = RpcValue::from(n);
             let _ = to_cpon(&rv);
             let cpk = to_chainpack(&rv);
             let rv_cpk = from_chainpack(&cpk);
@@ -190,7 +181,6 @@ fn test_cpon_chainpack() {
 #[test]
 fn test_conversions()
 {
-    init_log();
     log::info!("testConversions ------------");
     for lst in [
         [&(u64::MAX.to_string() + "u"), ""],

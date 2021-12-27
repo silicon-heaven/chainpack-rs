@@ -4,8 +4,8 @@ use log;
 
 use lazy_static::lazy_static;
 
-use crate::datetime::DateTime;
-use crate::decimal::Decimal;
+use crate::datetime;
+use crate::decimal;
 use crate::metamap::MetaMap;
 use crate::reader::Reader;
 use crate::{CponReader, ReadResult};
@@ -35,6 +35,15 @@ lazy_static! {
     static ref EMPTY_METAMAP_REF: MetaMap = MetaMap::new();
 }
 
+#[macro_export(local_inner_macros)]
+macro_rules! make_map {
+	($( $key: expr => $val: expr ),*) => {{
+		 let mut map = rpcvalue::Map::new();
+		 $( map.insert($key.to_string(), RpcValue::from($val)); )*
+		 map
+	}}
+}
+
 pub type Blob = Vec<u8>;
 pub type List = Vec<RpcValue>;
 pub type Map = BTreeMap<String, RpcValue>;
@@ -48,8 +57,8 @@ pub enum Value {
 	UInt(u64),
 	Double(f64),
 	Bool(bool),
-	DateTime(DateTime),
-	Decimal(Decimal),
+	DateTime(datetime::DateTime),
+	Decimal(decimal::Decimal),
 	String(Box<String>),
 	Blob(Box<Blob>),
 	List(Box<List>),
@@ -77,6 +86,22 @@ impl Value {
 			Value::IMap(_) => "IMap",
 		}
 	}
+	pub fn is_default_value(&self) -> bool {
+		match &self {
+			Value::Null => true,
+			Value::Int(i) => *i == 0,
+			Value::UInt(u) => *u == 0,
+			Value::Double(d) => *d == 0.0,
+			Value::Bool(b) => *b == false,
+			Value::DateTime(dt) => dt.epoch_msec() == 0,
+			Value::Decimal(d) => d.mantissa() == 0,
+			Value::String(s) => s.is_empty(),
+			Value::Blob(b) => b.is_empty(),
+			Value::List(l) => l.is_empty(),
+			Value::Map(m) => m.is_empty(),
+			Value::IMap(m) => m.is_empty(),
+		}
+	}
 }
 
 pub trait FromValue {
@@ -95,13 +120,13 @@ impl FromValue for u32 { fn chainpack_make_value(self) -> Value { Value::UInt(se
 impl FromValue for isize { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
 impl FromValue for usize { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
 impl FromValue for chrono::NaiveDateTime {
-    fn chainpack_make_value(self) -> Value {
-        Value::DateTime(DateTime::from_epoch_msec(self.timestamp_millis()))
-    }
+	fn chainpack_make_value(self) -> Value {
+		Value::DateTime(datetime::DateTime::from_epoch_msec(self.timestamp_millis()))
+	}
 }
 impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
     fn chainpack_make_value(self) -> Value {
-        Value::DateTime(DateTime::from_datetime(&self))
+        Value::DateTime(datetime::DateTime::from_datetime(&self))
     }
 }
 
@@ -119,8 +144,8 @@ from_value!(bool, Bool);
 from_value!(i64, Int);
 from_value!(u64, UInt);
 from_value!(f64, Double);
-from_value!(DateTime, DateTime);
-from_value!(Decimal, Decimal);
+from_value!(datetime::DateTime, DateTime);
+from_value!(decimal::Decimal, Decimal);
 
 macro_rules! from_value_box {
     ($from:ty, $to:ident) => {
@@ -135,66 +160,15 @@ macro_rules! from_value_box {
 from_value_box!(Vec<RpcValue>, List);
 from_value_box!(BTreeMap<String, RpcValue>, Map);
 from_value_box!(BTreeMap<i32, RpcValue>, IMap);
-/*
-impl From<()> for Value { fn from(item: ()) -> Self { Value::Null } }
-impl From<&str> for Value { fn from(item: &str) -> Self { Value::Data(Box::new(item.as_bytes().to_vec())) } }
-impl From<String> for Value { fn from(item: String) -> Self { Value::Data(Box::new(item.into_bytes())) } }
-impl From<Vec<u8>> for Value { fn from(item: Vec<u8>) -> Self { Value::Data(Box::new(item)) } }
-impl From<&[u8]> for Value { fn from(item: &[u8]) -> Self { Value::Data(Box::new(item.to_vec())) } }
-impl From<&String> for Value { fn from(item: &String) -> Self { Value::Data(Box::new(item.as_bytes().to_vec())) } }
-impl From<i32> for Value  { fn from(item: i32) -> Self { Value::Int(item as i64) } }
-impl From<u32> for Value  { fn from(item: u32) -> Self { Value::UInt(item as u64) } }
-impl From<isize> for Value  { fn from(item: isize) -> Self { Value::Int(item as i64) } }
-impl From<usize> for Value  { fn from(item: usize) -> Self { Value::UInt(item as u64) } }
-impl From<chrono::NaiveDateTime> for Value  {
-	fn from(item: chrono::NaiveDateTime) -> Self {
-		Value::DateTime(DateTime::from_epoch_msec(item.timestamp_millis()))
-	}
-}
 
-impl<Tz: chrono::TimeZone> From<chrono::DateTime<Tz>> for Value {
-	fn from(item: chrono::DateTime<Tz>) -> Self {
-		Value::DateTime(DateTime::from_datetime(&item))
-	}
-}
- */
-/*
-macro_rules! convert_from_value {
-    ($from:ty, $to:ident) => {
-		impl From<$from> for Value {
-			fn from(item: $from) -> Self {
-				Value::$to(item)
-			}
-		}
-    };
-}
-
-convert_from_value!(bool, Bool);
-convert_from_value!(i64, Int);
-convert_from_value!(u64, UInt);
-convert_from_value!(f64, Double);
-convert_from_value!(DateTime, DateTime);
-convert_from_value!(Decimal, Decimal);
-
-macro_rules! convert_from_value_box {
-    ($from:ty, $to:ident) => {
-		impl From<$from> for RpcValue {
-			fn from(item: $from) -> Self {
-				RpcValue::$to(Box::new(item))
-			}
-		}
-    };
-}
-
-convert_from_value_box!(Vec<RpcValue>, List);
-convert_from_value_box!(BTreeMap<String, RpcValue>, Map);
-convert_from_value_box!(BTreeMap<i32, RpcValue>, IMap);
-*/
 macro_rules! rpcvalue_from {
     ($from:ty) => {
 		impl From<$from> for RpcValue {
 			fn from(item: $from) -> Self {
-				RpcValue::new(item)
+				RpcValue {
+					meta: None,
+					value: item.chainpack_make_value(),
+				}
 			}
 		}
     };
@@ -213,6 +187,7 @@ rpcvalue_from!(u64);
 rpcvalue_from!(isize);
 rpcvalue_from!(usize);
 rpcvalue_from!(chrono::NaiveDateTime);
+rpcvalue_from!(datetime::DateTime);
 rpcvalue_from!(List);
 rpcvalue_from!(Map);
 rpcvalue_from!(IMap);
@@ -235,12 +210,13 @@ pub struct RpcValue {
 }
 
 impl RpcValue {
-	pub fn default() -> RpcValue {
+	pub fn null() -> RpcValue {
 		RpcValue {
 			meta: None,
 			value: Value::Null,
 		}
 	}
+	/*
 	pub fn new<I>(val: I) -> RpcValue
 		where I: FromValue
 	{
@@ -249,6 +225,7 @@ impl RpcValue {
 			value: val.chainpack_make_value(),
 		}
 	}
+	*/
 	pub fn new_with_meta<I>(val: I, meta: Option<MetaMap>) -> RpcValue
 		where I: FromValue
 	{
@@ -312,6 +289,9 @@ impl RpcValue {
 	is_xxx!(is_map, Value::Map(_));
 	is_xxx!(is_imap, Value::IMap(_));
 
+	pub fn is_default_value(&self) -> bool {
+		self.value.is_default_value()
+	}
 	pub fn as_bool(&self) -> bool {
 		match &self.value {
 			Value::Bool(d) => *d,
@@ -343,16 +323,29 @@ impl RpcValue {
 			_ => 0.,
 		}
 	}
-	pub fn as_datetime(&self) -> DateTime {
+	pub fn as_usize(&self) -> usize {
 		match &self.value {
-			Value::DateTime(d) => d.clone(),
-			_ => DateTime::invalid(),
+			Value::Int(d) => *d as usize,
+			Value::UInt(d) => *d as usize,
+			_ => 0 as usize,
 		}
 	}
-	pub fn as_decimal(&self) -> Decimal {
+	pub fn as_datetime(&self) -> datetime::DateTime {
+		match &self.value {
+			Value::DateTime(d) => d.clone(),
+			_ => datetime::DateTime::from_epoch_msec(0),
+		}
+	}
+	pub fn to_datetime(&self) -> Option<datetime::DateTime> {
+		match &self.value {
+			Value::DateTime(d) => Some(d.clone()),
+			_ => None,
+		}
+	}
+	pub fn as_decimal(&self) -> decimal::Decimal {
 		match &self.value {
 			Value::Decimal(d) => d.clone(),
-			_ => Decimal::new(0, 0),
+			_ => decimal::Decimal::new(0, 0),
 		}
 	}
 	// pub fn as_str(&self) -> Result<&str, Utf8Error> {
@@ -389,6 +382,35 @@ impl RpcValue {
 		match &self.value {
 			Value::IMap(b) => &b,
 			_ => &EMPTY_IMAP_REF,
+		}
+	}
+	pub fn get_by_str<'a>(&'a self, key: &str, default: &'a RpcValue) -> &'a RpcValue {
+		match self.value() {
+			Value::Map(m) => {
+				match m.get(key) {
+					None => { default }
+					Some(rv) => { rv }
+				}
+			}
+			_ => { default }
+		}
+	}
+	pub fn get_by_int<'a>(&'a self, key: i32, default: &'a RpcValue) -> &'a RpcValue {
+		match self.value() {
+			Value::List(lst) => {
+				let key = key as usize;
+				match lst.get(key) {
+					None => { default }
+					Some(rv) => { rv }
+				}
+			}
+			Value::IMap(m) => {
+				match m.get(&key) {
+					None => { default }
+					Some(rv) => { rv }
+				}
+			}
+			_ => { default }
 		}
 	}
 	pub fn to_cpon(&self) -> String {
@@ -480,48 +502,48 @@ mod test {
 	#[test]
 	fn rpcval_new()
 	{
-		let rv = RpcValue::new(true);
+		let rv = RpcValue::from(true);
 		assert_eq!(rv.as_bool(), true);
-		let rv = RpcValue::new("foo");
+		let rv = RpcValue::from("foo");
 		assert_eq!(rv.as_str(), "foo");
-		let rv = RpcValue::new(&b"bar"[..]);
+		let rv = RpcValue::from(&b"bar"[..]);
 		assert_eq!(rv.as_blob(), b"bar");
-		let rv = RpcValue::new(123);
+		let rv = RpcValue::from(123);
 		assert_eq!(rv.as_i32(), 123);
-		let rv = RpcValue::new(12.3);
+		let rv = RpcValue::from(12.3);
 		assert_eq!(rv.as_f64(), 12.3);
 
 		let dt = DateTime::now();
-		let rv = RpcValue::new(dt.clone());
+		let rv = RpcValue::from(dt.clone());
 		assert_eq!(rv.as_datetime(), dt);
 
 		let dc = Decimal::new(123, -1);
-		let rv = RpcValue::new(dc.clone());
+		let rv = RpcValue::from(dc.clone());
 		assert_eq!(rv.as_decimal(), dc);
 
 		let dt = chrono::offset::Utc::now();
-		let rv = RpcValue::new(dt.clone());
+		let rv = RpcValue::from(dt.clone());
 		assert_eq!(rv.as_datetime().epoch_msec(), dt.timestamp_millis());
 
 		let dt = chrono::offset::Local::now();
-		let rv = RpcValue::new(dt.clone());
+		let rv = RpcValue::from(dt.clone());
 		assert_eq!(rv.as_datetime().epoch_msec() + rv.as_datetime().utc_offset() as i64 * 1000
 				   , dt.timestamp_millis() + dt.offset().fix().local_minus_utc() as i64 * 1000);
 
-		let vec1 = vec![RpcValue::new(123), RpcValue::new("foo")];
-		let rv = RpcValue::new(vec1.clone());
+		let vec1 = vec![RpcValue::from(123), RpcValue::from("foo")];
+		let rv = RpcValue::from(vec1.clone());
 		assert_eq!(rv.as_list(), &vec1);
 
 		let mut m: Map = BTreeMap::new();
-		m.insert("foo".to_string(), RpcValue::new(123));
-		m.insert("bar".to_string(), RpcValue::new("foo"));
-		let rv = RpcValue::new(m.clone());
+		m.insert("foo".to_string(), RpcValue::from(123));
+		m.insert("bar".to_string(), RpcValue::from("foo"));
+		let rv = RpcValue::from(m.clone());
 		assert_eq!(rv.as_map(), &m);
 
 		let mut m: BTreeMap<i32, RpcValue> = BTreeMap::new();
-		m.insert(1, RpcValue::new(123));
-		m.insert(2, RpcValue::new("foo"));
-		let rv = RpcValue::new(m.clone());
+		m.insert(1, RpcValue::from(123));
+		m.insert(2, RpcValue::from("foo"));
+		let rv = RpcValue::from(m.clone());
 		assert_eq!(rv.as_imap(), &m);
 	}
 

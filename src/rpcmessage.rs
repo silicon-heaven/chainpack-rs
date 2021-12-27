@@ -35,8 +35,8 @@ pub struct RpcMessage (RpcValue);
 impl RpcMessage {
     pub fn default() -> Self {
         let mut mm = MetaMap::new();
-        mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
-        //mm.insert(Tag::Method as i32, RpcValue::new(method));
+        mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::from(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
+        //mm.insert(Tag::Method as i32, RpcValue::from(method));
         RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(mm)))
     }
     pub fn new(meta: MetaMap, value: Value) -> Self {
@@ -153,7 +153,7 @@ impl RpcMessage {
         if src.is_request() {
             if let Some(rqid) = src.request_id() {
                 let mut dest = MetaMap::new();
-                dest.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::new(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
+                dest.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::from(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
                 dest.set_request_id(rqid);
                 dest.set_caller_ids(&src.caller_ids());
                 return Ok(dest)
@@ -222,7 +222,7 @@ pub trait RpcMessageMetaTags {
     //     }
     // }
     fn set_request_id(&mut self, id: RqId) -> &mut Self::Target {
-        self.set_tag(Tag::RequestId as i32, Some(RpcValue::new(id)))
+        self.set_tag(Tag::RequestId as i32, Some(RpcValue::from(id)))
     }
     fn shv_path(&self) -> Option<&str> {
         let t = self.tag(Tag::ShvPath as i32);
@@ -232,7 +232,7 @@ pub trait RpcMessageMetaTags {
         }
     }
     fn set_shvpath(&mut self, shv_path: &str) -> &mut Self::Target {
-        self.set_tag(Tag::ShvPath as i32, Some(RpcValue::new(shv_path)))
+        self.set_tag(Tag::ShvPath as i32, Some(RpcValue::from(shv_path)))
     }
     fn method(&self) -> Option<&str> {
         let t = self.tag(Tag::Method as i32);
@@ -242,7 +242,7 @@ pub trait RpcMessageMetaTags {
         }
     }
     fn set_method(&mut self, method: &str) -> &mut Self::Target {
-        self.set_tag(Tag::Method as i32, Some(RpcValue::new(method)))
+        self.set_tag(Tag::Method as i32, Some(RpcValue::from(method)))
     }
 
     fn caller_ids(&self) -> Vec<CliId> {
@@ -266,10 +266,10 @@ pub trait RpcMessageMetaTags {
             return self.set_tag(Tag::CallerIds as i32, None);
         }
         if ids.len() == 1 {
-            return self.set_tag(Tag::CallerIds as i32, Some(RpcValue::new(ids[0] as CliId)));
+            return self.set_tag(Tag::CallerIds as i32, Some(RpcValue::from(ids[0] as CliId)));
         }
-        let lst: List = ids.into_iter().map(|v| RpcValue::new(*v)).collect();
-        return self.set_tag(Tag::CallerIds as i32, Some(RpcValue::new(lst)));
+        let lst: List = ids.into_iter().map(|v| RpcValue::from(*v)).collect();
+        return self.set_tag(Tag::CallerIds as i32, Some(RpcValue::from(lst)));
     }
 
     fn push_caller_id(&mut self, id: CliId) -> &mut Self::Target {
@@ -341,9 +341,9 @@ impl RpcError {
     pub fn new(code: RpcErrorCode, msg: &str) -> Self {
         enum Key {KeyCode = 1, KeyMessage}
         let mut m = IMap::new();
-        m.insert(Key::KeyCode as i32, RpcValue::new(code as i64));
+        m.insert(Key::KeyCode as i32, RpcValue::from(code as i64));
         if msg.len() > 0 {
-            m.insert(Key::KeyMessage as i32, RpcValue::new(msg.to_string()));
+            m.insert(Key::KeyMessage as i32, RpcValue::from(msg.to_string()));
         }
         RpcError(m)
     }
@@ -354,7 +354,7 @@ impl RpcError {
         None
     }
     pub fn to_rpcvalue(&self) -> RpcValue {
-        RpcValue::new(self.0.clone())
+        RpcValue::from(self.0.clone())
     }
 }
 
@@ -380,7 +380,7 @@ mod test {
     fn rpc_request() {
         let id = RpcMessage::next_request_id();
         let mut rq = RpcMessage::create_request_with_id(id, "foo/bar", "baz", None);
-        let params = RpcValue::new(123);
+        let params = RpcValue::from(123);
         rq.set_params(params.clone());
         assert_eq!(rq.params(), Some(&params));
         let caller_ids = vec![1,2,3];
