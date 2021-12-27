@@ -4,7 +4,7 @@ use log;
 
 use lazy_static::lazy_static;
 
-use crate::datetime;
+use crate::{datetime, Decimal};
 use crate::decimal;
 use crate::metamap::MetaMap;
 use crate::reader::Reader;
@@ -14,6 +14,7 @@ use crate::CponWriter;
 use crate::chainpack::ChainPackWriter;
 use crate::chainpack::ChainPackReader;
 use std::convert::From;
+use chrono::Utc;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
@@ -186,11 +187,22 @@ rpcvalue_from!(u32);
 rpcvalue_from!(u64);
 rpcvalue_from!(isize);
 rpcvalue_from!(usize);
+rpcvalue_from!(f64);
+rpcvalue_from!(Decimal);
 rpcvalue_from!(chrono::NaiveDateTime);
 rpcvalue_from!(datetime::DateTime);
 rpcvalue_from!(List);
 rpcvalue_from!(Map);
 rpcvalue_from!(IMap);
+impl<Tz: chrono::TimeZone> From<chrono::DateTime<Tz>> for RpcValue
+{
+	fn from(item: chrono::DateTime<Tz>) -> Self {
+		RpcValue {
+			meta: None,
+			value: item.chainpack_make_value(),
+		}
+	}
+}
 
 macro_rules! is_xxx {
     ($name:ident, $variant:pat) => {
