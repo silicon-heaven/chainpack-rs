@@ -393,7 +393,7 @@ impl<'a, R> ChainPackReader<'a, R>
         }
         let s = std::str::from_utf8(&buff);
         match s {
-            Ok(s) => return Ok(Value::new(s)),
+            Ok(s) => return Ok(Value::from(s)),
             Err(e) => return Err(self.make_error(&format!("Invalid string, Utf8 error: {}", e))),
         }
     }
@@ -406,7 +406,7 @@ impl<'a, R> ChainPackReader<'a, R>
         }
         let s = std::str::from_utf8(&buff);
         match s {
-            Ok(s) => return Ok(Value::new(s)),
+            Ok(s) => return Ok(Value::from(s)),
             Err(e) => return Err(self.make_error(&format!("Invalid string, Utf8 error: {}", e))),
         }
     }
@@ -417,7 +417,7 @@ impl<'a, R> ChainPackReader<'a, R>
             let b = self.get_byte()?;
             buff.push(b);
         }
-        return Ok(Value::new(buff))
+        return Ok(Value::from(buff))
     }
     fn read_list_data(&mut self) -> Result<Value, ReadError> {
         let mut lst = Vec::new();
@@ -430,7 +430,7 @@ impl<'a, R> ChainPackReader<'a, R>
             let val = self.read()?;
             lst.push(val);
         }
-        return Ok(Value::new(lst))
+        return Ok(Value::from(lst))
     }
     fn read_map_data(&mut self) -> Result<Value, ReadError> {
         let mut map: Map = Map::new();
@@ -451,7 +451,7 @@ impl<'a, R> ChainPackReader<'a, R>
             let val = self.read()?;
             map.insert(key.to_string(), val);
         }
-        return Ok(Value::new(map))
+        return Ok(Value::from(map))
     }
     fn read_imap_data(&mut self) -> Result<Value, ReadError> {
         let mut map: BTreeMap<i32, RpcValue> = BTreeMap::new();
@@ -472,7 +472,7 @@ impl<'a, R> ChainPackReader<'a, R>
             let val = self.read()?;
             map.insert(key, val);
         }
-        return Ok(Value::new(map))
+        return Ok(Value::from(map))
     }
     fn read_datetime_data(&mut self) -> Result<Value, ReadError> {
         let mut d = self.read_int_data()?;
@@ -492,7 +492,7 @@ impl<'a, R> ChainPackReader<'a, R>
         }
         d += SHV_EPOCH_MSEC;
         let dt = DateTime::from_epoch_msec_tz(d, (offset as i32 * 15) * 60);
-        return Ok(Value::new(dt))
+        return Ok(Value::from(dt))
     }
     fn read_double_data(&mut self) -> Result<Value, ReadError> {
         let mut buff: [u8;8] = [0;8];
@@ -500,13 +500,13 @@ impl<'a, R> ChainPackReader<'a, R>
             return Err(self.make_error(&format!("{}", e)))
         }
         let d = f64::from_le_bytes(buff);
-        return Ok(Value::new(d))
+        return Ok(Value::from(d))
     }
     fn read_decimal_data(&mut self) -> Result<Value, ReadError> {
         let mantisa = self.read_int_data()?;
         let exponent = self.read_int_data()?;
         let d = Decimal::new(mantisa, exponent as i8);
-        return Ok(Value::new(d))
+        return Ok(Value::from(d))
     }
 }
 
@@ -548,51 +548,51 @@ impl<'a, R> Reader for ChainPackReader<'a, R>
             if b < 128 {
                 if (b & 64) == 0 {
                     // tiny UInt
-                    Value::new((b & 63) as u64)
+                    Value::from((b & 63) as u64)
                 }
                 else {
                     // tiny Int
-                    Value::new((b & 63) as i64)
+                    Value::from((b & 63) as i64)
                 }
             } else if b == PackingSchema::Int as u8 {
                 let n = self.read_int_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::UInt as u8 {
                 let n = self.read_uint_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::Double as u8 {
                 let n = self.read_double_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::Decimal as u8 {
                 let n = self.read_decimal_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::DateTime as u8 {
                 let n = self.read_datetime_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::String as u8 {
                 let n = self.read_string_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::CString as u8 {
                 let n = self.read_cstring_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::Blob as u8 {
                 let n = self.read_blob_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::List as u8 {
                 let n = self.read_list_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::Map as u8 {
                 let n = self.read_map_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::IMap as u8 {
                 let n = self.read_imap_data()?;
-                Value::new(n)
+                Value::from(n)
             } else if b == PackingSchema::TRUE as u8 {
-                Value::new(true)
+                Value::from(true)
             } else if b == PackingSchema::FALSE as u8 {
-                Value::new(false)
+                Value::from(false)
             } else if b == PackingSchema::Null as u8 {
-                Value::new(())
+                Value::from(())
             } else {
                 return Err(self.make_error(&format!("Invalid Packing schema: {}", b)))
             };

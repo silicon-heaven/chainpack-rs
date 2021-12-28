@@ -4,7 +4,7 @@ use log;
 
 use lazy_static::lazy_static;
 
-use crate::{datetime, Decimal};
+use crate::{datetime, DateTime, Decimal};
 use crate::decimal;
 use crate::metamap::MetaMap;
 use crate::reader::Reader;
@@ -68,9 +68,6 @@ pub enum Value {
 }
 
 impl Value {
-	pub(crate) fn new(v: impl FromValue) -> Value {
-		v.chainpack_make_value()
-	}
 	pub fn type_name(&self) -> &'static str {
 		match &self {
 			Value::Null => "Null",
@@ -105,105 +102,59 @@ impl Value {
 	}
 }
 
-pub trait FromValue {
-    fn chainpack_make_value(self) -> Value;
-}
+impl From<()> for Value { fn from(val: ()) -> Self { Value::Null }}
+impl From<bool> for Value { fn from(val: bool) -> Self { Value::Bool(val) }}
+impl From<&str> for Value { fn from(val: &str) -> Self { Value::String(Box::new(val.to_string())) }}
+impl From<String> for Value { fn from(val: String) -> Self { Value::String(Box::new(val)) }}
+impl From<&String> for Value { fn from(val: &String) -> Self { Value::String(Box::new(val.clone())) }}
+impl From<Vec<u8>> for Value { fn from(val: Vec<u8>) -> Self { Value::Blob(Box::new(val)) }}
+impl From<&[u8]> for Value { fn from(val: &[u8]) -> Self { Value::Blob(Box::new(val.to_vec())) }}
+impl From<i32> for Value { fn from(val: i32) -> Self { Value::Int(val.into()) }}
+impl From<i64> for Value { fn from(val: i64) -> Self { Value::Int(val) }}
+impl From<isize> for Value { fn from(val: isize) -> Self { Value::Int(val as i64) }}
+impl From<u32> for Value { fn from(val: u32) -> Self { Value::UInt(val.into()) }}
+impl From<u64> for Value { fn from(val: u64) -> Self { Value::UInt(val) }}
+impl From<usize> for Value { fn from(val: usize) -> Self { Value::UInt(val as u64) }}
+impl From<f64> for Value { fn from(val: f64) -> Self { Value::Double(val as f64) }}
+impl From<Decimal> for Value { fn from(val: Decimal) -> Self { Value::Decimal(val) }}
+impl From<List> for Value { fn from(val: List) -> Self { Value::List(Box::new(val)) }}
+impl From<Map> for Value { fn from(val: Map) -> Self { Value::Map(Box::new(val)) }}
+impl From<IMap> for Value { fn from(val: IMap) -> Self { Value::IMap(Box::new(val)) }}
+impl From<datetime::DateTime> for Value { fn from(val: datetime::DateTime) -> Self { Value::DateTime(val) }}
+impl From<chrono::NaiveDateTime> for Value { fn from(val: chrono::NaiveDateTime) -> Self { Value::DateTime(DateTime::from_naive_datetime(&val)) }}
+impl<Tz: chrono::TimeZone> From<chrono::DateTime<Tz>> for Value { fn from(item: chrono::DateTime<Tz>) -> Self { Value::DateTime(datetime::DateTime::from_datetime(&item)) }}
 
-impl FromValue for Value { fn chainpack_make_value(self) -> Value { self } }
-impl FromValue for () { fn chainpack_make_value(self) -> Value { Value::Null } }
-impl FromValue for &str { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.to_string())) } }
-impl FromValue for String { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self)) } }
-impl FromValue for &String { fn chainpack_make_value(self) -> Value { Value::String(Box::new(self.clone())) } }
-impl FromValue for Vec<u8> { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self)) } }
-impl FromValue for &[u8] { fn chainpack_make_value(self) -> Value { Value::Blob(Box::new(self.to_vec())) } }
-impl FromValue for i32 { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
-impl FromValue for u32 { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
-impl FromValue for isize { fn chainpack_make_value(self) -> Value { Value::Int(self as i64) } }
-impl FromValue for usize { fn chainpack_make_value(self) -> Value { Value::UInt(self as u64) } }
-impl FromValue for chrono::NaiveDateTime {
-	fn chainpack_make_value(self) -> Value {
-		Value::DateTime(datetime::DateTime::from_epoch_msec(self.timestamp_millis()))
-	}
-}
-impl<Tz: chrono::TimeZone> FromValue for chrono::DateTime<Tz> {
-    fn chainpack_make_value(self) -> Value {
-        Value::DateTime(datetime::DateTime::from_datetime(&self))
-    }
-}
-
-macro_rules! from_value {
-    ($from:ty, $to:ident) => {
-		impl FromValue for $from {
-			fn chainpack_make_value(self) -> Value {
-				Value::$to(self)
-			}
-		}
-    };
-}
-
-from_value!(bool, Bool);
-from_value!(i64, Int);
-from_value!(u64, UInt);
-from_value!(f64, Double);
-from_value!(datetime::DateTime, DateTime);
-from_value!(decimal::Decimal, Decimal);
-
-macro_rules! from_value_box {
-    ($from:ty, $to:ident) => {
-		impl FromValue for $from {
-			fn chainpack_make_value(self) -> Value {
-				Value::$to(Box::new(self))
-			}
-		}
-    };
-}
-
-from_value_box!(Vec<RpcValue>, List);
-from_value_box!(BTreeMap<String, RpcValue>, Map);
-from_value_box!(BTreeMap<i32, RpcValue>, IMap);
-
-macro_rules! rpcvalue_from {
-    ($from:ty) => {
-		impl From<$from> for RpcValue {
-			fn from(item: $from) -> Self {
-				RpcValue {
-					meta: None,
-					value: item.chainpack_make_value(),
-				}
-			}
-		}
-    };
-}
-rpcvalue_from!(());
-rpcvalue_from!(bool);
-rpcvalue_from!(&str);
-rpcvalue_from!(String);
-rpcvalue_from!(Vec<u8>);
-rpcvalue_from!(&[u8]);
-rpcvalue_from!(&String);
-rpcvalue_from!(i32);
-rpcvalue_from!(i64);
-rpcvalue_from!(u32);
-rpcvalue_from!(u64);
-rpcvalue_from!(isize);
-rpcvalue_from!(usize);
-rpcvalue_from!(f64);
-rpcvalue_from!(Decimal);
-rpcvalue_from!(chrono::NaiveDateTime);
-rpcvalue_from!(datetime::DateTime);
-rpcvalue_from!(List);
-rpcvalue_from!(Map);
-rpcvalue_from!(IMap);
-impl<Tz: chrono::TimeZone> From<chrono::DateTime<Tz>> for RpcValue
-{
-	fn from(item: chrono::DateTime<Tz>) -> Self {
+// cannot use generic implementation
+//impl<T> From<T> for RpcValue { fn from(val: T) -> Self { RpcValue { meta: None, value: val.into() }}}
+// because of error: error[E0119]: conflicting implementations of trait `std::convert::From<rpcvalue::RpcValue>` for type `rpcvalue::RpcValue`
+impl From<()> for RpcValue { fn from(val: ()) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<bool> for RpcValue { fn from(val: bool) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<&str> for RpcValue { fn from(val: &str) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<String> for RpcValue { fn from(val: String) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<&String> for RpcValue { fn from(val: &String) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<Vec<u8>> for RpcValue { fn from(val: Vec<u8>) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<&[u8]> for RpcValue { fn from(val: &[u8]) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<i32> for RpcValue { fn from(val: i32) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<i64> for RpcValue { fn from(val: i64) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<isize> for RpcValue { fn from(val: isize) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<u32> for RpcValue { fn from(val: u32) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<u64> for RpcValue { fn from(val: u64) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<usize> for RpcValue { fn from(val: usize) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<f64> for RpcValue { fn from(val: f64) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<Decimal> for RpcValue { fn from(val: Decimal) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<List> for RpcValue { fn from(val: List) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<Map> for RpcValue { fn from(val: Map) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<IMap> for RpcValue { fn from(val: IMap) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<datetime::DateTime> for RpcValue { fn from(val: datetime::DateTime) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<chrono::NaiveDateTime> for RpcValue { fn from(val: chrono::NaiveDateTime) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl<Tz: chrono::TimeZone> From<chrono::DateTime<Tz>> for RpcValue {
+	fn from(val: chrono::DateTime<Tz>) -> Self {
 		RpcValue {
 			meta: None,
-			value: item.chainpack_make_value(),
+			value: val.into(),
 		}
 	}
 }
-
 macro_rules! is_xxx {
     ($name:ident, $variant:pat) => {
         pub fn $name(&self) -> bool {
@@ -228,6 +179,12 @@ impl RpcValue {
 			value: Value::Null,
 		}
 	}
+	pub fn new(v: Value, m: Option<MetaMap>) -> Self {
+		RpcValue {
+			meta: m.map(|mm| Box::new(mm)),
+			value: v,
+		}
+	}
 	/*
 	pub fn new<I>(val: I) -> RpcValue
 		where I: FromValue
@@ -237,7 +194,6 @@ impl RpcValue {
 			value: val.chainpack_make_value(),
 		}
 	}
-	*/
 	pub fn new_with_meta<I>(val: I, meta: Option<MetaMap>) -> RpcValue
 		where I: FromValue
 	{
@@ -250,7 +206,22 @@ impl RpcValue {
 			value: val.chainpack_make_value(),
 		}
 	}
-
+		pub fn set_meta(&mut self, m: MetaMap) {
+		if m.is_empty() {
+			self.meta = None;
+		}
+		else {
+			self.meta = Some(Box::new(m));
+		}
+	}
+	*/
+	pub fn set_meta(mut self, meta: Option<MetaMap>) -> Self {
+		match meta {
+			None => { self.meta = None }
+			Some(mm) => { self.meta = Some(Box::new(mm)) }
+		}
+		self
+	}
 	pub fn has_meta(&self) -> bool {
 		match &self.meta {
 			Some(_) => true,
@@ -271,14 +242,6 @@ impl RpcValue {
 	}
 	pub fn clear_meta(&mut self) {
 		self.meta = None;
-	}
-	pub fn set_meta(&mut self, m: MetaMap) {
-		if m.is_empty() {
-			self.meta = None;
-		}
-		else {
-			self.meta = Some(Box::new(m));
-		}
 	}
 
 	pub fn value(&self) -> &Value {

@@ -479,7 +479,7 @@ impl<'a, R> CponReader<'a, R>
         }
         let s = std::str::from_utf8(&buff);
         match s {
-            Ok(s) => return Ok(Value::new(s)),
+            Ok(s) => return Ok(Value::from(s)),
             Err(e) => return Err(self.make_error(&format!("Invalid String, Utf8 error: {}", e))),
         }
     }
@@ -525,7 +525,7 @@ impl<'a, R> CponReader<'a, R>
                 }
             }
         }
-        Ok(Value::new(buff))
+        Ok(Value::from(buff))
     }
     fn read_blob_hex(&mut self) -> Result<Value, ReadError> {
         let mut buff: Vec<u8> = Vec::new();
@@ -547,7 +547,7 @@ impl<'a, R> CponReader<'a, R>
             let b = self.decode_byte(b1)? * 16 + self.decode_byte(b2)?;
             buff.push(b);
         }
-        Ok(Value::new(buff))
+        Ok(Value::from(buff))
     }
     fn read_int(&mut self, no_signum: bool) -> Result<(u64, bool, i32), ReadError>
     {
@@ -685,14 +685,14 @@ impl<'a, R> CponReader<'a, R>
             mantisa += decimals;
             let mut snum = mantisa as i64;
             if is_neg { snum = -snum }
-            return Ok(Value::new(Decimal::new(snum, (exponent - dec_cnt) as i8)))
+            return Ok(Value::from(Decimal::new(snum, (exponent - dec_cnt) as i8)))
         }
         if is_uint {
-            return Ok(Value::new(mantisa))
+            return Ok(Value::from(mantisa))
         }
         let mut snum = mantisa as i64;
         if is_neg { snum = -snum }
-        return Ok(Value::new(snum))
+        return Ok(Value::from(snum))
     }
     fn read_list(&mut self) -> Result<Value, ReadError>
     {
@@ -708,7 +708,7 @@ impl<'a, R> CponReader<'a, R>
             let val = self.read()?;
             lst.push(val);
         }
-        return Ok(Value::new(lst))
+        return Ok(Value::from(lst))
     }
 
     fn read_map(&mut self) -> Result<Value, ReadError> {
@@ -737,7 +737,7 @@ impl<'a, R> CponReader<'a, R>
             let val = self.read()?;
             map.insert(skey.to_string(), val);
         }
-        return Ok(Value::new(map))
+        return Ok(Value::from(map))
     }
     fn read_imap(&mut self) -> Result<Value, ReadError> {
         self.get_byte()?; // eat 'i'
@@ -759,7 +759,7 @@ impl<'a, R> CponReader<'a, R>
             let val = self.read()?;
             map.insert(key as i32, val);
         }
-        return Ok(Value::new(map))
+        return Ok(Value::from(map))
     }
     fn read_datetime(&mut self) -> Result<Value, ReadError> {
         self.get_byte()?; // eat 'd'
@@ -767,7 +767,7 @@ impl<'a, R> CponReader<'a, R>
         if let Value::String(sdata) = v {
             match DateTime::from_iso_str(&sdata) {
                 Ok(dt) => {
-                    return Ok(Value::new(dt));
+                    return Ok(Value::from(dt));
                 }
                 Err(err) => {
                     return Err(self.make_error(&err))
@@ -778,15 +778,15 @@ impl<'a, R> CponReader<'a, R>
     }
     fn read_true(&mut self) -> Result<Value, ReadError> {
         self.read_token("true")?;
-        return Ok(Value::new(true))
+        return Ok(Value::from(true))
     }
     fn read_false(&mut self) -> Result<Value, ReadError> {
         self.read_token("false")?;
-        return Ok(Value::new(false))
+        return Ok(Value::from(false))
     }
     fn read_null(&mut self) -> Result<Value, ReadError> {
         self.read_token("null")?;
-        return Ok(Value::new(()))
+        return Ok(Value::from(()))
     }
     fn read_token(&mut self, token: &str) -> Result<(), ReadError> {
         for c in token.as_bytes() {

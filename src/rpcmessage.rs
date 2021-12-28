@@ -37,29 +37,25 @@ impl RpcMessage {
         let mut mm = MetaMap::new();
         mm.insert(rpctype::Tag::MetaTypeId as i32, RpcValue::from(rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i32));
         //mm.insert(Tag::Method as i32, RpcValue::from(method));
-        RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(mm)))
+        RpcMessage(RpcValue::new(IMap::new().into(),Some(mm)))
     }
-    pub fn new(meta: MetaMap, value: Value) -> Self {
-        if let None = meta.tag(rpctype::Tag::MetaTypeId as i32) {
-            panic!("Tag MetaTypeId is missing!");
-        }
-        if let Value::IMap(val) = value {
-            let rv = RpcValue::new_with_meta(*val, Some(meta));
-            return RpcMessage(rv)
-        }
-        panic!("Value must be IMap!");
+    pub fn new(meta: MetaMap, value: Value) -> Result<Self, &'static str> {
+        Self::from_rpcvalue(RpcValue::new(value, Some(meta)))
     }
     pub fn from_meta(meta: MetaMap) -> Self {
-        RpcMessage(RpcValue::new_with_meta(IMap::new(), Some(meta)))
+        RpcMessage(RpcValue::from(IMap::new()).set_meta(Some(meta)))
     }
     pub fn from_rpcvalue(rv: RpcValue) -> Result<Self, &'static str> {
-        if !rv.has_meta() {
-            return Err("Not RpcMessage")
+        if let Some(id) = rv.meta().tag(rpctype::Tag::MetaTypeId as i32) {
+            if id.as_int() == rpctype::GlobalNS::MetaTypeID::ChainPackRpcMessage as i64 {
+                if rv.is_imap() {
+                    return Ok(Self(rv))
+                }
+                return Err("Value must be IMap!");
+            }
+            return Err("Tag MetaTypeId is wrong!");
         }
-        if !rv.is_imap() {
-            return Err("Not RpcMessage")
-        }
-        Ok(RpcMessage(rv))
+        return Err("Tag MetaTypeId is missing!");
     }
     pub fn as_rpcvalue(&self) -> &RpcValue {
         return &self.0
