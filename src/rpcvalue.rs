@@ -14,7 +14,6 @@ use crate::CponWriter;
 use crate::chainpack::ChainPackWriter;
 use crate::chainpack::ChainPackReader;
 use std::convert::From;
-use chrono::Utc;
 
 // see https://github.com/rhysd/tinyjson/blob/master/src/json_value.rs
 
@@ -102,7 +101,7 @@ impl Value {
 	}
 }
 
-impl From<()> for Value { fn from(val: ()) -> Self { Value::Null }}
+impl From<()> for Value { fn from(_: ()) -> Self { Value::Null }}
 impl From<bool> for Value { fn from(val: bool) -> Self { Value::Bool(val) }}
 impl From<&str> for Value { fn from(val: &str) -> Self { Value::String(Box::new(val.to_string())) }}
 impl From<String> for Value { fn from(val: String) -> Self { Value::String(Box::new(val)) }}
@@ -164,6 +163,34 @@ macro_rules! is_xxx {
             }
         }
     };
+}
+
+pub enum GetValueKey<'a> {
+	Int(i32),
+	Str(&'a str),
+}
+pub trait GetValueIx {
+	fn make_key(&self) -> GetValueKey;
+}
+impl GetValueIx for &str {
+	fn make_key(&self) -> GetValueKey {
+		GetValueKey::Str(self)
+	}
+}
+impl GetValueIx for i32 {
+	fn make_key(&self) -> GetValueKey {
+		GetValueKey::Int(*self)
+	}
+}
+impl GetValueIx for u32 {
+	fn make_key(&self) -> GetValueKey {
+		GetValueKey::Int(*self as i32)
+	}
+}
+impl GetValueIx for usize {
+	fn make_key(&self) -> GetValueKey {
+		GetValueKey::Int(*self as i32)
+	}
 }
 
 #[derive(PartialEq, Clone)]
@@ -359,35 +386,54 @@ impl RpcValue {
 			_ => &EMPTY_IMAP_REF,
 		}
 	}
-	pub fn get_by_str<'a>(&'a self, key: &str, default: &'a RpcValue) -> &'a RpcValue {
-		match self.value() {
-			Value::Map(m) => {
-				match m.get(key) {
-					None => { default }
-					Some(rv) => { rv }
+	pub fn get<I>(&self, key: I) -> Option<&RpcValue>
+		where I: GetValueIx
+	{
+		match key.make_key() {
+			GetValueKey::Int(ix) => {
+				match &self.value {
+					Value::List(lst) => lst.get(ix as usize),
+					Value::IMap(map) => map.get(&ix),
+					_ => { None }
 				}
 			}
-			_ => { default }
+			GetValueKey::Str(ix) => {
+				match &self.value {
+					Value::Map(map) => map.get(ix),
+					_ => { None }
+				}
+			}
 		}
 	}
-	pub fn get_by_int<'a>(&'a self, key: i32, default: &'a RpcValue) -> &'a RpcValue {
-		match self.value() {
-			Value::List(lst) => {
-				let key = key as usize;
-				match lst.get(key) {
-					None => { default }
-					Some(rv) => { rv }
-				}
-			}
-			Value::IMap(m) => {
-				match m.get(&key) {
-					None => { default }
-					Some(rv) => { rv }
-				}
-			}
-			_ => { default }
-		}
-	}
+	//pub fn get_by_str<'a>(&'a self, key: &str, default: &'a RpcValue) -> &'a RpcValue {
+	//	match self.value() {
+	//		Value::Map(m) => {
+	//			match m.get(key) {
+	//				None => { default }
+	//				Some(rv) => { rv }
+	//			}
+	//		}
+	//		_ => { default }
+	//	}
+	//}
+	//pub fn get_by_int<'a>(&'a self, key: i32, default: &'a RpcValue) -> &'a RpcValue {
+	//	match self.value() {
+	//		Value::List(lst) => {
+	//			let key = key as usize;
+	//			match lst.get(key) {
+	//				None => { default }
+	//				Some(rv) => { rv }
+	//			}
+	//		}
+	//		Value::IMap(m) => {
+	//			match m.get(&key) {
+	//				None => { default }
+	//				Some(rv) => { rv }
+	//			}
+	//		}
+	//		_ => { default }
+	//	}
+	//}
 	pub fn to_cpon(&self) -> String {
 		let mut buff: Vec<u8> = Vec::new();
 		let mut wr = CponWriter::new(&mut buff);
