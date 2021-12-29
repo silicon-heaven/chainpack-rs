@@ -10,7 +10,7 @@ pub struct CponWriter<'a, W>
     where W: Write
 {
     byte_writer: ByteWriter<'a, W>,
-    indent: String,
+    indent: Vec<u8>,
     nest_count: usize,
 }
 
@@ -20,12 +20,12 @@ impl<'a, W> CponWriter<'a, W>
     pub fn new(write: &'a mut W) -> Self {
         CponWriter {
             byte_writer: ByteWriter::new(write),
-            indent: "".to_string(),
+            indent: "".as_bytes().to_vec(),
             nest_count: 0,
         }
     }
-    pub fn set_indent(&mut self, indent: &str) {
-        self.indent = indent.to_string();
+    pub fn set_indent(&mut self, indent: &[u8]) {
+        self.indent = indent.to_vec();
     }
 
     fn is_oneliner_list(lst: &Vec<RpcValue>) -> bool {
@@ -100,7 +100,7 @@ impl<'a, W> CponWriter<'a, W>
             } else {
                 self.write_byte(b'\n')?;
                 for _ in 0 .. self.nest_count {
-                    self.byte_writer.write_bytes(self.indent.as_bytes())?;
+                    self.byte_writer.write_bytes(&self.indent)?;
                 }
             }
         }

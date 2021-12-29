@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::fmt;
-use log;
 
 use lazy_static::lazy_static;
 
@@ -405,49 +404,21 @@ impl RpcValue {
 			}
 		}
 	}
-	//pub fn get_by_str<'a>(&'a self, key: &str, default: &'a RpcValue) -> &'a RpcValue {
-	//	match self.value() {
-	//		Value::Map(m) => {
-	//			match m.get(key) {
-	//				None => { default }
-	//				Some(rv) => { rv }
-	//			}
-	//		}
-	//		_ => { default }
-	//	}
-	//}
-	//pub fn get_by_int<'a>(&'a self, key: i32, default: &'a RpcValue) -> &'a RpcValue {
-	//	match self.value() {
-	//		Value::List(lst) => {
-	//			let key = key as usize;
-	//			match lst.get(key) {
-	//				None => { default }
-	//				Some(rv) => { rv }
-	//			}
-	//		}
-	//		Value::IMap(m) => {
-	//			match m.get(&key) {
-	//				None => { default }
-	//				Some(rv) => { rv }
-	//			}
-	//		}
-	//		_ => { default }
-	//	}
-	//}
-	pub fn to_cpon(&self) -> String {
+	pub fn to_cpon(&self) -> String { self.to_cpon_indented("").unwrap_or("".to_string()) }
+	pub fn to_cpon_indented(&self, indent: &str) -> crate::Result<String> {
+		let buff = self.to_cpon_bytes_indented(indent.as_bytes())?;
+		match String::from_utf8(buff) {
+			Ok(s) => Ok(s),
+			Err(e) => Err(e.into()),
+		}
+	}
+	pub fn to_cpon_bytes_indented(&self, indent: &[u8]) -> crate::Result<Vec<u8>> {
 		let mut buff: Vec<u8> = Vec::new();
 		let mut wr = CponWriter::new(&mut buff);
-		let res = wr.write(self);
-		if let Err(e) = res {
-			log::warn!("to_cpon write with error: {}", e);
-			return String::new()
-		}
-		match String::from_utf8(buff) {
-			Ok(s) => s,
-			Err(e) => {
-				log::warn!("to_cpon from UTF8 error: {}", e);
-				String::new()
-			},
+		wr.set_indent(indent);
+		match wr.write(self) {
+			Ok(_) => { Ok(buff) }
+			Err(err) => { Err(err.into()) }
 		}
 	}
 	pub fn to_chainpack(&self) -> Vec<u8> {
