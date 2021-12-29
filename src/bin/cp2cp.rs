@@ -47,7 +47,7 @@ fn main() {
     };
     let rv = match res {
         Err(e) => {
-            log::error!("Parse input error: {:?}", e);
+            eprintln!("Parse input error: {:?}", e);
             process::exit(1);
         }
         Ok(rv) => rv,
@@ -68,7 +68,7 @@ fn main() {
         wr.write(&rv)
     };
     if let Err(e) = res {
-        log::error!("Write output error: {:?}", e);
+        eprintln!("Write output error: {:?}", e);
         process::exit(1);
     }
 }
