@@ -91,12 +91,12 @@ impl RpcMessage {
     }
 
     fn tag<Idx>(&self, key: Idx) -> Option<&RpcValue>
-        where Idx: IntoMetaKeyRef
+        where Idx: GetValueIx
     {
-        self.0.meta().value(key)
+        self.0.meta().get(key)
     }
     fn set_tag<Idx>(&mut self, key: Idx, rv: Option<RpcValue>) -> &mut Self
-        where Idx: IntoMetaKeyRef
+        where Idx: GetValueIx
     {
         if let Some(mm) = self.0.meta_mut(){
             match rv {
@@ -302,7 +302,7 @@ impl RpcMessageMetaTags for MetaMap {
     type Target = MetaMap;
 
     fn tag(&self, id: i32) -> Option<&RpcValue> {
-        self.value(id)
+        self.get(id)
     }
     fn set_tag(&mut self, id: i32, val: Option<RpcValue>) -> &mut Self::Target {
         match val {
