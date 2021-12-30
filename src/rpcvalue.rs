@@ -164,31 +164,31 @@ macro_rules! is_xxx {
     };
 }
 
-pub enum GetValueKey<'a> {
+pub enum GetKey<'a> {
 	Int(i32),
 	Str(&'a str),
 }
-pub trait GetValueIx {
-	fn make_key(&self) -> GetValueKey;
+pub trait GetIndex {
+	fn make_key(&self) -> GetKey;
 }
-impl GetValueIx for &str {
-	fn make_key(&self) -> GetValueKey {
-		GetValueKey::Str(self)
+impl GetIndex for &str {
+	fn make_key(&self) -> GetKey {
+		GetKey::Str(self)
 	}
 }
-impl GetValueIx for i32 {
-	fn make_key(&self) -> GetValueKey {
-		GetValueKey::Int(*self)
+impl GetIndex for i32 {
+	fn make_key(&self) -> GetKey {
+		GetKey::Int(*self)
 	}
 }
-impl GetValueIx for u32 {
-	fn make_key(&self) -> GetValueKey {
-		GetValueKey::Int(*self as i32)
+impl GetIndex for u32 {
+	fn make_key(&self) -> GetKey {
+		GetKey::Int(*self as i32)
 	}
 }
-impl GetValueIx for usize {
-	fn make_key(&self) -> GetValueKey {
-		GetValueKey::Int(*self as i32)
+impl GetIndex for usize {
+	fn make_key(&self) -> GetKey {
+		GetKey::Int(*self as i32)
 	}
 }
 
@@ -386,17 +386,17 @@ impl RpcValue {
 		}
 	}
 	pub fn get<I>(&self, key: I) -> Option<&RpcValue>
-		where I: GetValueIx
+		where I: GetIndex
 	{
 		match key.make_key() {
-			GetValueKey::Int(ix) => {
+			GetKey::Int(ix) => {
 				match &self.value {
 					Value::List(lst) => lst.get(ix as usize),
 					Value::IMap(map) => map.get(&ix),
 					_ => { None }
 				}
 			}
-			GetValueKey::Str(ix) => {
+			GetKey::Str(ix) => {
 				match &self.value {
 					Value::Map(map) => map.get(ix),
 					_ => { None }

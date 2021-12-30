@@ -12,43 +12,15 @@ pub enum MetaKey {
     Int(i32),
     Str(String),
 }
-impl From<&GetValueKey<'_>> for MetaKey {
-    fn from(k: &GetValueKey) -> Self {
+impl From<&GetKey<'_>> for MetaKey {
+    fn from(k: &GetKey) -> Self {
         match k {
-            GetValueKey::Int(i) => MetaKey::Int(*i),
-            GetValueKey::Str(s) => MetaKey::Str((*s).to_string()),
-        }
-    }
-}
-/*
-pub enum MetaKeyRef<'a> {
-    Int(i32),
-    Str(&'a str),
-}
-impl<'a> MetaKeyRef<'a> {
-    fn to_metakey(&'a self) -> MetaKey {
-        match self {
-            MetaKeyRef::Int(val) => MetaKey::Int(*val),
-            MetaKeyRef::Str(val) => MetaKey::Str(val.to_string()),
+            GetKey::Int(i) => MetaKey::Int(*i),
+            GetKey::Str(s) => MetaKey::Str((*s).to_string()),
         }
     }
 }
 
-pub trait IntoMetaKeyRef: Copy {
-    fn to_metakeyref(&self) -> MetaKeyRef;
-}
-impl IntoMetaKeyRef for &str {
-    fn to_metakeyref(&self) -> MetaKeyRef {
-        MetaKeyRef::Str(self)
-    }
-}
-
-impl IntoMetaKeyRef for i32 {
-    fn to_metakeyref(&self) -> MetaKeyRef {
-        MetaKeyRef::Int(*self)
-    }
-}
-*/
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct MetaKeyVal {
     pub(crate) key: MetaKey,
@@ -56,31 +28,31 @@ pub(crate) struct MetaKeyVal {
 }
 
 #[derive(Copy, Clone)]
-pub enum GetValueKey<'a> {
+pub enum GetKey<'a> {
     Int(i32),
     Str(&'a str),
 }
-pub trait GetValueIx {
-    fn make_key(&self) -> GetValueKey;
+pub trait GetIndex {
+    fn make_key(&self) -> GetKey;
 }
-impl GetValueIx for &str {
-    fn make_key(&self) -> GetValueKey {
-        GetValueKey::Str(self)
+impl GetIndex for &str {
+    fn make_key(&self) -> GetKey {
+        GetKey::Str(self)
     }
 }
-impl GetValueIx for i32 {
-    fn make_key(&self) -> GetValueKey {
-        GetValueKey::Int(*self)
+impl GetIndex for i32 {
+    fn make_key(&self) -> GetKey {
+        GetKey::Int(*self)
     }
 }
-impl GetValueIx for u32 {
-    fn make_key(&self) -> GetValueKey {
-        GetValueKey::Int(*self as i32)
+impl GetIndex for u32 {
+    fn make_key(&self) -> GetKey {
+        GetKey::Int(*self as i32)
     }
 }
-impl GetValueIx for usize {
-    fn make_key(&self) -> GetValueKey {
-        GetValueKey::Int(*self as i32)
+impl GetIndex for usize {
+    fn make_key(&self) -> GetKey {
+        GetKey::Int(*self as i32)
     }
 }
 
@@ -99,7 +71,7 @@ impl MetaMap {
         self.0.len()
     }
     pub fn insert<I>(&mut self, key: I, value: RpcValue) -> &mut Self
-        where I: GetValueIx
+        where I: GetIndex
     {
         match self.find(&key) {
             None => {
@@ -112,7 +84,7 @@ impl MetaMap {
         self
     }
     pub fn remove<I>(&mut self, key: I) -> Option<RpcValue>
-        where I: GetValueIx
+        where I: GetIndex
     {
         match self.find(&key) {
             None => None,
@@ -120,7 +92,7 @@ impl MetaMap {
         }
     }
     pub fn get<I>(&self, key: I) -> Option<&RpcValue>
-        where I: GetValueIx
+        where I: GetIndex
     {
         match self.find(&key) {
             Some(ix) => Some(&self.0[ix].value),
@@ -128,7 +100,7 @@ impl MetaMap {
         }
     }
     pub fn get_or_null<I>(&self, key: I) -> &RpcValue
-        where I: GetValueIx
+        where I: GetIndex
     {
         match self.find(&key) {
             Some(ix) => &self.0[ix].value,
@@ -136,19 +108,19 @@ impl MetaMap {
         }
     }
     fn find<I>(&self, key: &I) -> Option<usize>
-        where I: GetValueIx
+        where I: GetIndex
     {
         let key_to_search = key.make_key();
         let mut ix = 0;
         for kv in &self.0 {
             match key_to_search {
-                GetValueKey::Int(key_to_search) => {
+                GetKey::Int(key_to_search) => {
                     match &kv.key {
                         MetaKey::Int(key) if *key == key_to_search => {return Some(ix)}
                         _ => { () }
                     }
                 }
-                GetValueKey::Str(key_to_search) => {
+                GetKey::Str(key_to_search) => {
                     match &kv.key {
                         MetaKey::Str(key) if key == key_to_search => { return Some(ix) }
                         _ => { () }

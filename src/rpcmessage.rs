@@ -91,12 +91,12 @@ impl RpcMessage {
     }
 
     fn tag<Idx>(&self, key: Idx) -> Option<&RpcValue>
-        where Idx: GetValueIx
+        where Idx: GetIndex
     {
         self.0.meta().get(key)
     }
     fn set_tag<Idx>(&mut self, key: Idx, rv: Option<RpcValue>) -> &mut Self
-        where Idx: GetValueIx
+        where Idx: GetIndex
     {
         if let Some(mm) = self.0.meta_mut(){
             match rv {

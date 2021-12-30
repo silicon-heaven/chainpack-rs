@@ -20,8 +20,7 @@ impl<'a, W> ByteWriter<'a, W>
     }
     pub(crate) fn count(&self) -> usize { self.cnt }
     pub(crate) fn write_byte(&mut self, b: u8) -> WriteResult {
-        let mut arr: [u8; 1] = [0];
-        arr[0] = b;
+        let arr: [u8; 1] = [b];
         let n = self.write.write(&arr)?;
         self.cnt += n;
         Ok(n)
