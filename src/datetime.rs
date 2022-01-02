@@ -2,15 +2,32 @@
 
 use std::cmp::Ordering;
 use std::fmt;
-use chrono::Offset;
+use chrono::{NaiveDateTime, Offset};
 
 /// msec: 57, tz: 7;
 /// tz is stored as signed count of quarters of hour (15 min)
 /// I'm storing whole DateTime in one i64 to keep size_of RpcValue == 24
 const TZ_MASK: i64 = 127;
+pub enum IncludeMilliseconds {
+    #[allow(dead_code)]
+    Never,
+    Always,
+    WhenNonZero,
+}
+pub struct ToISOStringOptions {
+    pub(crate) include_millis: IncludeMilliseconds,
+    pub(crate) include_timezone: bool,
+}
+impl Default for ToISOStringOptions {
+    fn default() -> Self {
+        ToISOStringOptions {
+            include_millis: IncludeMilliseconds::Always,
+            include_timezone: true
+        }
+    }
+}
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub struct DateTime (i64);
-
 impl DateTime {
     //pub fn invalid() -> DateTime {
     //    DateTime::from_epoch_msec(0)
@@ -72,16 +89,16 @@ impl DateTime {
                             if let Ok(hrs) = rest.parse::<i32>() {
                                 offset = 60 * 60 * hrs;
                             } else {
-                                return Err(format!("Invalid DateTime TZ part: '{}", rest))
+                                return Err(format!("Invalid DateTime TZ(3) part: '{}, date time: {}", rest, iso_str))
                             }
                         } else if rest.len() == 5 {
                             if let Ok(hrs) = rest.parse::<i32>() {
                                 offset = 60 * (60 * (hrs / 100) + (hrs % 100));
                             } else {
-                                return Err(format!("Invalid DateTime TZ part: '{}", rest))
+                                return Err(format!("Invalid DateTime TZ(5) part: '{}, date time: {}", rest, iso_str))
                             }
                         } else {
-                            return Err(format!("Invalid DateTime TZ part: '{}", rest))
+                            return Err(format!("Invalid DateTime TZ part: '{}, date time: {}", rest, iso_str))
                         }
                     }
 
@@ -112,37 +129,64 @@ impl DateTime {
         chrono::DateTime::from_utc(self.to_chrono_naivedatetime()
                                    , chrono::FixedOffset::east(self.utc_offset()))
     }
-    pub fn to_cpon_string(&self) -> String {
+    pub fn to_iso_string(&self) -> String {
+        self.to_iso_string_opt(&ToISOStringOptions::default())
+    }
+    pub fn to_iso_string_opt(&self, opts: &ToISOStringOptions) -> String {
         let dt = self.to_chrono_datetime();
         let mut s = format!("{}", dt.format("%Y-%m-%dT%H:%M:%S"));
         let ms = self.epoch_msec() % 1000;
-        if ms > 0 {
-            s.push_str(&format!(".{:03}", ms));
-        }
-        let mut offset = self.utc_offset();
-        if offset == 0 {
-            s.push('Z');
-        }
-        else {
-            if offset < 0 {
-                s.push('-');
-                offset = -offset;
-            } else {
-                s.push('+');
+        match opts.include_millis {
+            IncludeMilliseconds::Never => {}
+            IncludeMilliseconds::Always => { s.push_str(&format!(".{:03}", ms)); }
+            IncludeMilliseconds::WhenNonZero => {
+                if ms > 0 {
+                    s.push_str(&format!(".{:03}", ms));
+                }
             }
-            let offset_hr = offset / 60 / 60;
-            let offset_min = offset / 60 % 60;
-            s += &format!("{:02}", offset_hr);
-            if offset_min > 0 {
-                s += &format!("{:02}", offset_min);
+        }
+        if opts.include_timezone {
+            let mut offset = self.utc_offset();
+            if offset == 0 {
+                s.push('Z');
+            }
+            else {
+                if offset < 0 {
+                    s.push('-');
+                    offset = -offset;
+                } else {
+                    s.push('+');
+                }
+                let offset_hr = offset / 60 / 60;
+                let offset_min = offset / 60 % 60;
+                s += &format!("{:02}", offset_hr);
+                if offset_min > 0 {
+                    s += &format!("{:02}", offset_min);
+                }
             }
         }
         s
     }
 
-    pub fn add_days(&self, days: i32) -> Self {
+    pub fn add_days(&self, days: i64) -> Self {
         let (msec, offset) = self.epoc_msec_utc_offset();
-        Self::from_epoch_msec_tz(msec + ((days as i64) * 24 * 60 * 60 * 1000), offset)
+        Self::from_epoch_msec_tz(msec + (days * 24 * 60 * 60 * 1000), offset)
+    }
+    pub fn add_hours(&self, hours: i64) -> Self {
+        let (msec, offset) = self.epoc_msec_utc_offset();
+        Self::from_epoch_msec_tz(msec + (hours * 60 * 60 * 1000), offset)
+    }
+    pub fn add_minutes(&self, minutes: i64) -> Self {
+        let (msec, offset) = self.epoc_msec_utc_offset();
+        Self::from_epoch_msec_tz(msec + (minutes * 60 * 1000), offset)
+    }
+    pub fn add_seconds(&self, seconds: i64) -> Self {
+        let (msec, offset) = self.epoc_msec_utc_offset();
+        Self::from_epoch_msec_tz(msec + (seconds * 1000), offset)
+    }
+    pub fn add_millis(&self, millis: i64) -> Self {
+        let (msec, offset) = self.epoc_msec_utc_offset();
+        Self::from_epoch_msec_tz(msec + millis, offset)
     }
 }
 
@@ -166,6 +210,12 @@ impl Ord for DateTime {
 
 impl fmt::Display for DateTime {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.to_cpon_string())
+        write!(f, "{}", self.to_iso_string())
+    }
+}
+
+impl From<NaiveDateTime> for DateTime {
+    fn from(ndt: NaiveDateTime) -> Self {
+        DateTime::from_naive_datetime(&ndt)
     }
 }

@@ -1,6 +1,7 @@
 use std::io::{Write, Read};
 use crate::{RpcValue, MetaMap, Value, Decimal, DateTime};
 use std::collections::BTreeMap;
+use crate::datetime::{IncludeMilliseconds, ToISOStringOptions};
 use crate::writer::{WriteResult, Writer, ByteWriter};
 use crate::metamap::MetaKey;
 use crate::reader::{Reader, ByteReader, ReadError};
@@ -236,7 +237,10 @@ impl<'a, W> CponWriter<'a, W>
     }
     fn write_datetime(&mut self, dt: &DateTime) -> WriteResult {
         let cnt = self.write_bytes("d\"".as_bytes())?;
-        let s = dt.to_cpon_string();
+        let s = dt.to_iso_string_opt(&ToISOStringOptions {
+            include_millis: IncludeMilliseconds::WhenNonZero,
+            include_timezone: true
+        });
         self.write_bytes(s.as_bytes())?;
         self.write_byte(b'"')?;
         return Ok(self.byte_writer.count() - cnt)
@@ -854,9 +858,10 @@ impl<'a, R> Reader for CponReader<'a, R>
 #[cfg(test)]
 mod test
 {
-    use crate::{MetaMap, RpcValue};
+    use crate::{DateTime, MetaMap, RpcValue};
     use crate::Decimal;
     use std::collections::BTreeMap;
+    use chrono::{FixedOffset, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
     use crate::cpon::CponReader;
     use crate::reader::Reader;
     use crate::rpcvalue::Map;
@@ -883,6 +888,35 @@ mod test
         assert_eq!(RpcValue::from_cpon(r#""ěščřžýáí""#).unwrap().as_str(), "ěščřžýáí");
         assert_eq!(RpcValue::from_cpon("b\"foo\tbar\nbaz\"").unwrap().as_blob(), b"foo\tbar\nbaz");
         assert_eq!(RpcValue::from_cpon(r#""foo\"bar""#).unwrap().as_str(), r#"foo"bar"#);
+
+        let ndt = NaiveDateTime::new(NaiveDate::from_ymd(2022, 01, 02), NaiveTime::from_hms_milli(12, 59, 06, 0));
+        assert_eq!(RpcValue::from_cpon(r#"d"2022-01-02T12:59:06Z""#).unwrap().as_datetime(), DateTime::from_naive_datetime(&ndt));
+        let dt = chrono::DateTime::<Utc>::from_utc(ndt, Utc);
+        assert_eq!(RpcValue::from_cpon(r#"d"2022-01-02T12:59:06Z""#).unwrap().as_datetime(), DateTime::from_datetime(&dt));
+
+        let minute = 60;
+        let hour = 60 * minute;
+
+        let dt_str = r#"d"2021-11-08T01:02:03+05""#;
+        let dt = FixedOffset::east(5 * hour)
+            .ymd(2021, 11, 08)
+            .and_hms(1, 2, 3);
+        assert_eq!(RpcValue::from_cpon(dt_str).unwrap().as_datetime(), DateTime::from_datetime(&dt));
+        assert_eq!(RpcValue::from_cpon(dt_str).unwrap().to_cpon(), dt_str.to_string());
+
+        let dt_str = r#"d"2021-11-08T01:02:03-0815""#;
+        let dt = FixedOffset::west(8 * hour + 15 * minute)
+            .ymd(2021, 11, 08)
+            .and_hms(1, 2, 3);
+        assert_eq!(RpcValue::from_cpon(dt_str).unwrap().as_datetime(), DateTime::from_datetime(&dt));
+        assert_eq!(RpcValue::from_cpon(dt_str).unwrap().to_cpon(), dt_str.to_string());
+
+        let dt_str = r#"d"2021-11-08T01:02:03.456-0815""#;
+        let dt = FixedOffset::west(8 * hour + 15 * minute)
+            .ymd(2021, 11, 08)
+            .and_hms_milli(1, 2, 3, 456);
+        assert_eq!(RpcValue::from_cpon(dt_str).unwrap().as_datetime(), DateTime::from_datetime(&dt));
+        assert_eq!(RpcValue::from_cpon(dt_str).unwrap().to_cpon(), dt_str.to_string());
 
         let lst1 = vec![RpcValue::from(123), RpcValue::from("foo")];
         let cpon = r#"[123 , "foo"]"#;
