@@ -34,6 +34,9 @@ pub struct MetaMethod {
 
 impl MetaMethod {
     pub fn to_rpcvalue(&self, mask: u8) -> RpcValue {
+        if mask == 0 {
+            return self.name.clone().into();
+        }
         let mut lst = List::new();
         if (mask & DirAttribute::Signature as u8) != 0 {
             lst.push(RpcValue::from(self.signature as u32));

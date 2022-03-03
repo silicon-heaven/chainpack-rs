@@ -60,9 +60,9 @@ fn main() {
         let mut wr = CponWriter::new(&mut writer);
         if let Some(s) = cli.indent {
             if s == "\\t" {
-                wr.set_indent("\t");
+                wr.set_indent("\t".as_bytes());
             } else {
-                wr.set_indent(&s);
+                wr.set_indent(s.as_bytes());
             }
         }
         wr.write(&rv)

@@ -127,6 +127,7 @@ impl<Tz: chrono::TimeZone> From<chrono::DateTime<Tz>> for Value { fn from(item: 
 // because of error: error[E0119]: conflicting implementations of trait `std::convert::From<rpcvalue::RpcValue>` for type `rpcvalue::RpcValue`
 impl From<()> for RpcValue { fn from(val: ()) -> Self { RpcValue { meta: None, value: val.into() }}}
 impl From<bool> for RpcValue { fn from(val: bool) -> Self { RpcValue { meta: None, value: val.into() }}}
+impl From<&bool> for RpcValue { fn from(val: &bool) -> Self { RpcValue { meta: None, value: (*val).into() }}}
 impl From<&str> for RpcValue { fn from(val: &str) -> Self { RpcValue { meta: None, value: val.into() }}}
 impl From<String> for RpcValue { fn from(val: String) -> Self { RpcValue { meta: None, value: val.into() }}}
 impl From<&String> for RpcValue { fn from(val: &String) -> Self { RpcValue { meta: None, value: val.into() }}}
