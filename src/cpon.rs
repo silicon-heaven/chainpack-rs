@@ -176,10 +176,6 @@ impl<'a, W> CponWriter<'a, W>
         self.write_bytes(b"b\"")?;
         for b in bytes {
             match b {
-                0 => {
-                    self.write_byte(b'\\')?;
-                    self.write_byte(b'0')?;
-                }
                 b'\\' => {
                     self.write_byte(b'\\')?;
                     self.write_byte(b'\\')?;
@@ -201,8 +197,8 @@ impl<'a, W> CponWriter<'a, W>
                     self.write_byte(b'"')?;
                 }
                 _ => {
-                    if *b >= 128 {
-                        self.write_bytes(b"\\x")?;
+                    if *b < 0x20 || *b >= 0x7f {
+                        self.write_byte(b'\\')?;
                         fn to_hex(b: u8) -> u8 {
                             if b < 10 {
                                 return b'0' + b;
@@ -510,14 +506,12 @@ impl<'a, R> CponReader<'a, R>
                         b'n' => buff.push(b'\n'),
                         b'r' => buff.push(b'\r'),
                         b't' => buff.push(b'\t'),
-                        b'0' => buff.push(b'\0'),
-                        b'x' => {
-                            let hi = self.get_byte()?;
+                        _ => {
+                            let hi = b;
                             let lo = self.get_byte()?;
                             let b = self.decode_byte(hi)? * 16 + self.decode_byte(lo)?;
                             buff.push(b)
                         },
-                        _ => buff.push(b),
                     }
                 }
                 b'"' => {

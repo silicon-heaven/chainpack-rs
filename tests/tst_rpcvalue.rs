@@ -207,8 +207,8 @@ fn test_conversions()
         ["-0.00012", "-12e-5"],
         ["-1234567890.", "-1234567890."],
         ["\"foo\"", ""],
-        ["b\"ab\\xcd\"", ""],
-        ["x\"41f1\"", "b\"A\\xf1\""],
+        ["b\"ab\\cd\"", ""],
+        ["x\"41f1\"", "b\"A\\f1\""],
         ["[]", ""],
         ["[1]", ""],
         ["[1,]", "[1]"],
@@ -243,7 +243,7 @@ fn test_conversions()
         let cpon1 = lst[0];
         let cpon2 = if lst[1].len() == 0 { lst[0] } else { lst[1] };
 
-        log::debug!("-------------> cpon1: {}", cpon1);
+        //println!("-------------> cpon1: {}", cpon1);
         let rv1 = from_cpon(cpon1);
         //log::debug!("\t rv1: {}", &rv1);
         let cpk1 = rv1.to_chainpack();
