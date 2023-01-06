@@ -11,7 +11,6 @@ lazy_static = "1.4"
 chrono = "0.4"
 log = "0.4"
 structopt = "0.3"
-flexi_logger = { version = "0.23.2", features = ["colors"] }
 bytes = "1.2.1"
 
 [[bin]]
