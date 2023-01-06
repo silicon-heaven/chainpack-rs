@@ -751,7 +751,7 @@ impl<'a, R> CponReader<'a, R>
                 self.get_byte()?;
                 break;
             }
-            let (k, neg, _) = self.read_int(true)?;
+            let (k, neg, _) = self.read_int(false)?;
             let key = if neg == true { k as i64 * -1 } else { k as i64 };
             self.skip_white_insignificant()?;
             let val = self.read()?;
@@ -882,6 +882,18 @@ mod test
         assert_eq!(RpcValue::from_cpon(r#""ěščřžýáí""#).unwrap().as_str(), "ěščřžýáí");
         assert_eq!(RpcValue::from_cpon("b\"foo\tbar\nbaz\"").unwrap().as_blob(), b"foo\tbar\nbaz");
         assert_eq!(RpcValue::from_cpon(r#""foo\"bar""#).unwrap().as_str(), r#"foo"bar"#);
+
+        assert_eq!(RpcValue::from_cpon("[]").unwrap().to_cpon(), "[]");
+        assert_eq!(RpcValue::from_cpon("[1,2,3]").unwrap().to_cpon(), "[1,2,3]");
+        assert_eq!(RpcValue::from_cpon("[").is_err(), true);
+
+        assert_eq!(RpcValue::from_cpon("{}").unwrap().to_cpon(), "{}");
+        assert_eq!(RpcValue::from_cpon(r#"{"foo": 1, "bar":"baz", }"#).unwrap().to_cpon(), r#"{"bar":"baz","foo":1}"#);
+        assert_eq!(RpcValue::from_cpon("{").is_err(), true);
+
+        assert_eq!(RpcValue::from_cpon("i{}").unwrap().to_cpon(), "i{}");
+        assert_eq!(RpcValue::from_cpon(r#"i{1: "foo", -1:"bar", 0:"baz", }"#).unwrap().to_cpon(), r#"i{-1:"bar",0:"baz",1:"foo"}"#);
+        assert_eq!(RpcValue::from_cpon("i{").is_err(), true);
 
         let ndt = NaiveDateTime::new(NaiveDate::from_ymd(2022, 01, 02), NaiveTime::from_hms_milli(12, 59, 06, 0));
         assert_eq!(RpcValue::from_cpon(r#"d"2022-01-02T12:59:06Z""#).unwrap().as_datetime(), DateTime::from_naive_datetime(&ndt));

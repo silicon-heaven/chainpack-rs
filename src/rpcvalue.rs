@@ -208,7 +208,10 @@ impl RpcValue {
 	}
 	pub fn new(v: Value, m: Option<MetaMap>) -> Self {
 		RpcValue {
-			meta: m.map(|mm| Box::new(mm)),
+			meta: match m {
+				None => None,
+				Some(mm) => Some(Box::new(mm)),
+			},
 			value: v,
 		}
 	}
