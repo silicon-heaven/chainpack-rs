@@ -2,7 +2,7 @@
 
 use std::cmp::Ordering;
 use std::fmt;
-use chrono::{NaiveDateTime, Offset};
+use chrono::{FixedOffset, NaiveDateTime, Offset};
 
 /// msec: 57, tz: 7;
 /// tz is stored as signed count of quarters of hour (15 min)
@@ -123,11 +123,14 @@ impl DateTime {
 
     pub fn to_chrono_naivedatetime(&self) -> chrono::NaiveDateTime {
         let msec = self.epoch_msec();
-        chrono::NaiveDateTime::from_timestamp(msec / 1000, ((msec % 1000) * 1000) as u32)
+        chrono::NaiveDateTime::from_timestamp_opt(msec / 1000, ((msec % 1000) * 1000) as u32).unwrap_or(NaiveDateTime::default())
     }
     pub fn to_chrono_datetime(&self) -> chrono::DateTime<chrono::offset::FixedOffset> {
-        chrono::DateTime::from_utc(self.to_chrono_naivedatetime()
-                                   , chrono::FixedOffset::east(self.utc_offset()))
+        let offset = match FixedOffset::east_opt(self.utc_offset()) {
+            None => {FixedOffset::east_opt(0).unwrap()}
+            Some(o) => {o}
+        };
+        chrono::DateTime::from_utc(self.to_chrono_naivedatetime(), offset)
     }
     pub fn to_iso_string(&self) -> String {
         self.to_iso_string_opt(&ToISOStringOptions::default())

@@ -843,7 +843,7 @@ impl<'a, R> Reader for CponReader<'a, R>
             b't' => self.read_true(),
             b'f' => self.read_false(),
             b'n' => self.read_null(),
-            _ => Err(self.make_error(&format!("Invalid char {}", b))),
+            _ => Err(self.make_error(&format!("Invalid char {}, code: {}", char::from(b), b))),
         }?;
         Ok(v)
     }
