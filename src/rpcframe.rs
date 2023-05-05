@@ -2,7 +2,7 @@ use std::fmt;
 use std::io::{Cursor, BufReader};
 // use tracing::{instrument};
 use bytes::Buf;
-use crate::{ChainPackReader, ChainPackWriter, CponReader, CponWriter, MetaMap, RpcMessage};
+use crate::{ChainPackReader, ChainPackWriter, CponReader, CponWriter, MetaMap, RpcMessage, RpcMessageMetaTags, RpcValue};
 use crate::writer::Writer;
 use crate::reader::Reader;
 
@@ -106,3 +106,14 @@ impl fmt::Display for RpcFrame {
     }
 }
 
+impl RpcMessageMetaTags for RpcFrame {
+    type Target = RpcFrame;
+
+    fn tag(&self, id: i32) -> Option<&RpcValue> {
+        self.meta.tag(id)
+    }
+    fn set_tag(&mut self, id: i32, val: Option<RpcValue>) -> &mut Self::Target {
+        self.meta.set_tag(id, val);
+        self
+    }
+}
